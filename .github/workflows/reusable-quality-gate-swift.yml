@@ -1,0 +1,195 @@
+name: Reusable — Quality Gate (Swift / iOS)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Called by Swift/iOS repos via:
+#
+#   jobs:
+#     quality-gate:
+#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-swift.yml@main
+#       with:
+#         xcode-version: 'latest-stable'
+#         scheme: 'FORGE'
+#         destination: 'platform=iOS Simulator,name=iPhone 15,OS=latest'
+#       secrets: inherit
+#
+# Note: iOS builds require macOS runners — these are 10x the cost of
+# ubuntu runners (~$0.08/min vs $0.008/min on GitHub Actions).
+# This workflow always runs on macos-latest — budget accordingly.
+# For free tier: 2,000 macOS minutes/month. A typical run is 8-12 minutes.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+
+      xcode-version:
+        description: 'Xcode version (e.g. latest-stable, 15.2)'
+        type: string
+        default: 'latest-stable'
+        required: false
+
+      scheme:
+        description: 'Xcode scheme to build and test'
+        type: string
+        required: true
+
+      destination:
+        description: 'xcodebuild destination string'
+        type: string
+        default: 'platform=iOS Simulator,name=iPhone 15,OS=latest'
+        required: false
+
+      coverage-threshold:
+        description: 'Minimum line coverage %'
+        type: string
+        default: '80'
+        required: false
+
+      run-sonar:
+        description: 'Run SonarCloud analysis'
+        type: boolean
+        default: true
+        required: false
+
+      run-swiftlint:
+        description: 'Run SwiftLint'
+        type: boolean
+        default: true
+        required: false
+
+      working-directory:
+        description: 'Working directory'
+        type: string
+        default: '.'
+        required: false
+
+    secrets:
+      SONAR_TOKEN:
+        required: false
+
+jobs:
+  quality-gate:
+    name: Quality Gate (Swift/iOS)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode ${{ inputs.xcode-version }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ inputs.xcode-version }}
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # ── Gate 1: SwiftLint ───────────────────────────────────────────────
+      # Zero errors, zero warnings — enforced
+      - name: SwiftLint
+        if: inputs.run-swiftlint
+        run: |
+          if which swiftlint > /dev/null; then
+            swiftlint lint --strict
+          else
+            echo "SwiftLint not installed — installing via Homebrew"
+            brew install swiftlint
+            swiftlint lint --strict
+          fi
+
+      # ── Gate 2: Resolve SPM dependencies ────────────────────────────────
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -scheme "${{ inputs.scheme }}" \
+            | grep -E "warning:|error:|resolved" || true
+
+      # ── Gate 3: Build ───────────────────────────────────────────────────
+      - name: Build
+        run: |
+          xcodebuild build \
+            -scheme "${{ inputs.scheme }}" \
+            -destination "${{ inputs.destination }}" \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            | xcpretty --color || xcodebuild build \
+              -scheme "${{ inputs.scheme }}" \
+              -destination "${{ inputs.destination }}"
+
+      # ── Gate 4: Tests with coverage ─────────────────────────────────────
+      - name: Run tests with coverage
+        run: |
+          xcodebuild test \
+            -scheme "${{ inputs.scheme }}" \
+            -destination "${{ inputs.destination }}" \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            | xcpretty --color --report junit --output test-results.xml \
+            || xcodebuild test \
+              -scheme "${{ inputs.scheme }}" \
+              -destination "${{ inputs.destination }}" \
+              -enableCodeCoverage YES \
+              -resultBundlePath TestResults.xcresult
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action/macos@v2
+        if: always()
+        with:
+          files: test-results.xml
+          check_name: 'Test Results (Swift)'
+
+      # Extract coverage from xcresult and check threshold
+      - name: Check coverage threshold
+        run: |
+          # Extract coverage using xcrun xccov
+          COVERAGE=$(xcrun xccov view --report --json TestResults.xcresult 2>/dev/null \
+            | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          targets = data.get('targets', [])
+          # Find the main app target (not test target)
+          for t in targets:
+            if 'Tests' not in t.get('name', ''):
+              cov = t.get('lineCoverage', 0) * 100
+              print(f'{cov:.1f}')
+              break
+          " 2>/dev/null || echo "0")
+          echo "Coverage: ${COVERAGE}% (threshold: ${{ inputs.coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.coverage-threshold }}" | bc -l) )); then
+            echo "❌ Coverage ${COVERAGE}% is below threshold ${{ inputs.coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ Coverage ${COVERAGE}% meets threshold"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ github.run_id }}
+          path: |
+            ${{ inputs.working-directory }}/TestResults.xcresult
+            ${{ inputs.working-directory }}/test-results.xml
+          retention-days: 7
+
+      # ── Gate 5: SonarCloud ──────────────────────────────────────────────
+      - name: SonarCloud analysis
+        if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

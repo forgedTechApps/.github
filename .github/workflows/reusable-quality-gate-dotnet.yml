@@ -1,0 +1,197 @@
+name: Reusable — Quality Gate (.NET 8)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Called by .NET repos via:
+#
+#   jobs:
+#     quality-gate:
+#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-dotnet.yml@main
+#       with:
+#         dotnet-version: '8.0.x'
+#         solution-path: 'MyApp.sln'
+#         coverage-threshold: '80'
+#       secrets: inherit
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+
+      dotnet-version:
+        description: '.NET SDK version'
+        type: string
+        default: '8.0.x'
+        required: false
+
+      solution-path:
+        description: 'Path to .sln or .csproj file'
+        type: string
+        default: '.'
+        required: false
+
+      test-project-pattern:
+        description: 'Glob pattern for test projects'
+        type: string
+        default: '**/*.Tests.csproj'
+        required: false
+
+      coverage-threshold:
+        description: 'Minimum line coverage %'
+        type: string
+        default: '80'
+        required: false
+
+      run-sonar:
+        description: 'Run SonarCloud analysis'
+        type: boolean
+        default: true
+        required: false
+
+      run-owasp:
+        description: 'Run OWASP Dependency-Check'
+        type: boolean
+        default: true
+        required: false
+
+      working-directory:
+        description: 'Working directory'
+        type: string
+        default: '.'
+        required: false
+
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      NVD_API_KEY:
+        required: false
+
+jobs:
+  quality-gate:
+    name: Quality Gate (.NET)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET ${{ inputs.dotnet-version }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ inputs.solution-path }}
+
+      # ── Gate 1: Build ───────────────────────────────────────────────────
+      # Fails: any compiler error or warning treated as error
+      - name: Build
+        run: |
+          dotnet build ${{ inputs.solution-path }} \
+            --no-restore \
+            --configuration Release \
+            -p:TreatWarningsAsErrors=true
+
+      # ── Gate 2: Format check ────────────────────────────────────────────
+      - name: dotnet format check
+        run: |
+          dotnet format ${{ inputs.solution-path }} \
+            --verify-no-changes \
+            --no-restore \
+            || (echo "❌ Code is not formatted. Run: dotnet format" && exit 1)
+
+      # ── Gate 3: OWASP Dependency-Check ──────────────────────────────────
+      - name: OWASP Dependency-Check
+        if: inputs.run-owasp
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ github.repository }}
+          path: ${{ inputs.working-directory }}
+          format: HTML
+          out: reports/dependency-check
+          args: >-
+            --failOnCVSS 7
+            --enableRetired
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+
+      - name: Upload OWASP report
+        uses: actions/upload-artifact@v4
+        if: inputs.run-owasp && always()
+        with:
+          name: dependency-check-${{ github.run_id }}
+          path: ${{ inputs.working-directory }}/reports/dependency-check
+          retention-days: 30
+
+      # ── Gate 4: Tests with coverage ─────────────────────────────────────
+      - name: Run tests with coverage
+        run: |
+          dotnet test ${{ inputs.solution-path }} \
+            --no-build \
+            --configuration Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --logger "console;verbosity=normal" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory TestResults \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: '**/TestResults/**/*.trx'
+          check_name: 'Test Results (.NET)'
+
+      - name: Check coverage threshold
+        run: |
+          # Parse Cobertura XML for line-rate
+          COVERAGE=$(find TestResults -name "coverage.cobertura.xml" | head -1 | xargs -I{} python3 -c "
+          import xml.etree.ElementTree as ET, sys
+          tree = ET.parse('{}')
+          rate = float(tree.getroot().get('line-rate', 0)) * 100
+          print(f'{rate:.1f}')
+          " 2>/dev/null || echo "0")
+          echo "Coverage: ${COVERAGE}% (threshold: ${{ inputs.coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.coverage-threshold }}" | bc -l) )); then
+            echo "❌ Coverage ${COVERAGE}% below threshold ${{ inputs.coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ Coverage ${COVERAGE}% meets threshold"
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ github.run_id }}
+          path: '**/TestResults/**/*.xml'
+          retention-days: 7
+
+      # ── Gate 5: Security audit ──────────────────────────────────────────
+      - name: dotnet list package --vulnerable
+        run: |
+          dotnet list ${{ inputs.solution-path }} package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+          if grep -q "has the following vulnerable packages" vuln-report.txt; then
+            echo "❌ Vulnerable NuGet packages found"
+            cat vuln-report.txt
+            exit 1
+          fi
+          echo "✅ No vulnerable packages found"
+
+      # ── Gate 6: SonarCloud ──────────────────────────────────────────────
+      - name: SonarCloud analysis
+        if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

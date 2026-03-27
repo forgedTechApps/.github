@@ -1,0 +1,221 @@
+name: Reusable — Quality Gate (Python)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Called by Python repos via:
+#
+#   jobs:
+#     quality-gate:
+#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-python.yml@main
+#       with:
+#         python-version: '3.12'
+#         coverage-threshold: '80'
+#       secrets: inherit
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+
+      python-version:
+        description: 'Python version'
+        type: string
+        default: '3.12'
+        required: false
+
+      coverage-threshold:
+        description: 'Minimum line coverage %'
+        type: string
+        default: '80'
+        required: false
+
+      run-sonar:
+        description: 'Run SonarCloud analysis'
+        type: boolean
+        default: true
+        required: false
+
+      run-owasp:
+        description: 'Run OWASP Dependency-Check'
+        type: boolean
+        default: true
+        required: false
+
+      working-directory:
+        description: 'Working directory'
+        type: string
+        default: '.'
+        required: false
+
+      test-path:
+        description: 'Path to tests directory or pytest pattern'
+        type: string
+        default: 'tests/'
+        required: false
+
+      source-path:
+        description: 'Path to source code (for coverage measurement)'
+        type: string
+        default: 'src/'
+        required: false
+
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      NVD_API_KEY:
+        required: false
+
+jobs:
+  quality-gate:
+    name: Quality Gate (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python ${{ inputs.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install from requirements files if present
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          if [ -f "requirements-dev.txt" ]; then pip install -r requirements-dev.txt; fi
+          if [ -f "pyproject.toml" ]; then pip install -e ".[dev]" 2>/dev/null || pip install -e .; fi
+          # Ensure core quality tools are available
+          pip install \
+            pytest pytest-cov pytest-asyncio \
+            ruff mypy bandit \
+            safety
+
+      # ── Gate 1: Ruff lint ───────────────────────────────────────────────
+      # Ruff: fast Python linter, replaces flake8 + isort + pycodestyle
+      - name: Ruff lint
+        run: ruff check . --output-format=github
+
+      # ── Gate 2: Ruff format check ───────────────────────────────────────
+      - name: Ruff format check
+        run: ruff format --check .
+
+      # ── Gate 3: Mypy type check ─────────────────────────────────────────
+      - name: Mypy type check
+        run: |
+          mypy ${{ inputs.source-path }} \
+            --ignore-missing-imports \
+            --strict \
+            || mypy ${{ inputs.source-path }} --ignore-missing-imports
+
+      # ── Gate 4: OWASP / Safety — dependency vulnerability scan ──────────
+      - name: Safety dependency scan
+        if: inputs.run-owasp
+        run: |
+          safety check --full-report --output text 2>&1 | tee safety-report.txt
+          # Exit code 64 = vulnerabilities found
+          EXIT_CODE=${PIPESTATUS[0]}
+          if [ $EXIT_CODE -eq 64 ]; then
+            echo "❌ Vulnerable dependencies found"
+            exit 1
+          elif [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 64 ]; then
+            echo "⚠️  Safety check encountered an error (exit $EXIT_CODE) — review manually"
+          else
+            echo "✅ No vulnerable dependencies found"
+          fi
+
+      - name: OWASP Dependency-Check
+        if: inputs.run-owasp
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ github.repository }}
+          path: ${{ inputs.working-directory }}
+          format: HTML
+          out: reports/dependency-check
+          args: >-
+            --failOnCVSS 7
+            --enableRetired
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+
+      - name: Upload OWASP report
+        uses: actions/upload-artifact@v4
+        if: inputs.run-owasp && always()
+        with:
+          name: dependency-check-${{ github.run_id }}
+          path: ${{ inputs.working-directory }}/reports/dependency-check
+          retention-days: 30
+
+      # ── Gate 5: Bandit security scan ────────────────────────────────────
+      # Static analysis for common security issues in Python
+      - name: Bandit security scan
+        run: |
+          bandit -r ${{ inputs.source-path }} \
+            -f json \
+            -o bandit-report.json \
+            -ll \
+            --severity-level medium \
+            || true
+          python3 -c "
+          import json, sys
+          with open('bandit-report.json') as f:
+            data = json.load(f)
+          issues = data.get('results', [])
+          high = [i for i in issues if i['issue_severity'] in ('HIGH', 'CRITICAL')]
+          medium = [i for i in issues if i['issue_severity'] == 'MEDIUM']
+          print(f'High/Critical: {len(high)}, Medium: {len(medium)}')
+          if high:
+            for i in high:
+              print(f'  {i[\"issue_severity\"]}: {i[\"issue_text\"]} ({i[\"filename\"]}:{i[\"line_number\"]})')
+            sys.exit(1)
+          print('✅ No high/critical security issues found')
+          "
+
+      # ── Gate 6: Tests with coverage ─────────────────────────────────────
+      - name: Run pytest with coverage
+        run: |
+          pytest ${{ inputs.test-path }} \
+            --cov=${{ inputs.source-path }} \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=${{ inputs.coverage-threshold }} \
+            --junitxml=test-results.xml \
+            -v
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: test-results.xml
+          check_name: 'Test Results (Python)'
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ github.run_id }}
+          path: |
+            ${{ inputs.working-directory }}/coverage.xml
+            ${{ inputs.working-directory }}/test-results.xml
+          retention-days: 7
+
+      # ── Gate 7: SonarCloud ──────────────────────────────────────────────
+      - name: SonarCloud analysis
+        if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

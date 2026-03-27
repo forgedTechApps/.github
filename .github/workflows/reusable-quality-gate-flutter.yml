@@ -1,0 +1,209 @@
+name: Reusable — Quality Gate (Flutter / Dart)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Called by Flutter repos via:
+#
+#   jobs:
+#     quality-gate:
+#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-flutter.yml@main
+#       with:
+#         flutter-version: '3.x'
+#         coverage-threshold: '80'
+#       secrets: inherit
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+
+      flutter-version:
+        description: 'Flutter SDK version (e.g. 3.x, 3.19.0)'
+        type: string
+        default: '3.x'
+        required: false
+
+      coverage-threshold:
+        description: 'Minimum line coverage %'
+        type: string
+        default: '80'
+        required: false
+
+      run-sonar:
+        description: 'Run SonarCloud analysis'
+        type: boolean
+        default: true
+        required: false
+
+      build-ios:
+        description: 'Run iOS build check (requires macOS runner — costs minutes)'
+        type: boolean
+        default: false
+        required: false
+
+      build-android:
+        description: 'Run Android build check'
+        type: boolean
+        default: true
+        required: false
+
+      working-directory:
+        description: 'Working directory'
+        type: string
+        default: '.'
+        required: false
+
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      NVD_API_KEY:
+        required: false
+
+jobs:
+  quality-gate:
+    name: Quality Gate (Flutter)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter ${{ inputs.flutter-version }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ inputs.flutter-version }}
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # ── Gate 1: Code generation check ──────────────────────────────────
+      # Ensures generated files (.g.dart, .freezed.dart) are up to date.
+      # Fails if someone forgot to run build_runner after changing providers/models.
+      - name: Verify generated files are up to date
+        run: |
+          flutter pub run build_runner build --delete-conflicting-outputs
+          git diff --exit-code || (
+            echo "❌ Generated files are out of date."
+            echo "Run: flutter pub run build_runner build --delete-conflicting-outputs"
+            echo "Then commit the changes."
+            exit 1
+          )
+
+      # ── Gate 2: Dart format ─────────────────────────────────────────────
+      - name: Dart format check
+        run: dart format --set-exit-if-changed .
+
+      # ── Gate 3: flutter analyze ─────────────────────────────────────────
+      # Fails on any error or warning — zero tolerance
+      - name: Flutter analyze
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      # ── Gate 4: OWASP Dependency-Check (pub packages) ───────────────────
+      # Scans pubspec.lock for known vulnerabilities.
+      # Note: Dart ecosystem CVE coverage is less complete than npm/PyPI.
+      - name: OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ github.repository }}
+          path: ${{ inputs.working-directory }}
+          format: HTML
+          out: reports/dependency-check
+          args: >-
+            --failOnCVSS 7
+            --enableRetired
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+
+      - name: Upload OWASP report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-${{ github.run_id }}
+          path: ${{ inputs.working-directory }}/reports/dependency-check
+          retention-days: 30
+
+      # ── Gate 5: Tests with coverage ─────────────────────────────────────
+      - name: Flutter test with coverage
+        run: flutter test --coverage --reporter=github
+
+      - name: Check coverage threshold
+        run: |
+          # Extract line coverage from lcov.info
+          LINES_HIT=$(grep -c "^DA:[0-9]*,1" coverage/lcov.info 2>/dev/null || echo 0)
+          LINES_TOTAL=$(grep -c "^DA:" coverage/lcov.info 2>/dev/null || echo 1)
+          COVERAGE=$(echo "scale=1; $LINES_HIT * 100 / $LINES_TOTAL" | bc)
+          echo "Coverage: ${COVERAGE}% (threshold: ${{ inputs.coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.coverage-threshold }}" | bc -l) )); then
+            echo "❌ Coverage ${COVERAGE}% is below threshold ${{ inputs.coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ Coverage ${COVERAGE}% meets threshold"
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ github.run_id }}
+          path: ${{ inputs.working-directory }}/coverage
+          retention-days: 7
+
+      # ── Gate 6: SonarCloud ──────────────────────────────────────────────
+      - name: SonarCloud analysis
+        if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # ── Gate 7: Android build ───────────────────────────────────────────
+      - name: Build Android APK
+        if: inputs.build-android
+        run: flutter build apk --release --no-pub
+
+      - name: Upload Android build
+        uses: actions/upload-artifact@v4
+        if: inputs.build-android
+        with:
+          name: android-build-${{ github.run_id }}
+          path: ${{ inputs.working-directory }}/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
+
+  # iOS build runs on macOS — separate job to avoid burning macOS minutes unless needed
+  ios-build:
+    name: iOS Build Check
+    runs-on: macos-latest
+    if: inputs.build-ios
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter ${{ inputs.flutter-version }}
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ inputs.flutter-version }}
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign --no-pub

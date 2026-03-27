@@ -1,0 +1,96 @@
+name: Reusable — Deploy to Railway
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Called by Node.js repos that deploy to Railway:
+#
+#   jobs:
+#     deploy:
+#       uses: forgedTech/.github/.github/workflows/reusable-deploy-railway.yml@main
+#       needs: quality-gate
+#       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+#       with:
+#         service-name: 'my-service'
+#         health-check-path: '/health'
+#       secrets: inherit
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+
+      service-name:
+        description: 'Railway service name (as shown in Railway dashboard)'
+        type: string
+        required: true
+
+      health-check-path:
+        description: 'Health check endpoint path (e.g. /health)'
+        type: string
+        default: '/health'
+        required: false
+
+      health-check-wait-seconds:
+        description: 'Seconds to wait after deploy before health check'
+        type: number
+        default: 30
+        required: false
+
+      environment:
+        description: 'GitHub environment name for deployment protection'
+        type: string
+        default: 'production'
+        required: false
+
+    secrets:
+      RAILWAY_TOKEN:
+        required: true
+      RAILWAY_PUBLIC_URL:
+        required: false
+
+jobs:
+  deploy:
+    name: Deploy (${{ inputs.service-name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        run: railway up --service ${{ inputs.service-name }} --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Post-deploy health check
+        if: secrets.RAILWAY_PUBLIC_URL != ''
+        run: |
+          echo "Waiting ${{ inputs.health-check-wait-seconds }}s for deployment to stabilise..."
+          sleep ${{ inputs.health-check-wait-seconds }}
+
+          URL="${RAILWAY_PUBLIC_URL}${{ inputs.health-check-path }}"
+          echo "Checking: $URL"
+
+          for attempt in 1 2 3; do
+            RESPONSE=$(curl --fail --silent --max-time 15 "$URL" 2>/dev/null || echo "")
+            if [ -n "$RESPONSE" ]; then
+              echo "Response: $RESPONSE"
+              echo "✅ Deployment healthy (attempt $attempt)"
+              exit 0
+            fi
+            echo "Attempt $attempt failed — retrying in 10s..."
+            sleep 10
+          done
+
+          echo "❌ Health check failed after 3 attempts"
+          exit 1
+        env:
+          RAILWAY_PUBLIC_URL: ${{ secrets.RAILWAY_PUBLIC_URL }}

@@ -1,0 +1,97 @@
+name: Bug Report
+description: Something is broken or behaving incorrectly.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Complete all required fields. Incomplete bug reports will be closed.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What is broken?
+      description: Clear description of the problem. What did you expect? What happened instead?
+      placeholder: |
+        Expected: When I call ingest_github_issue with a valid issue number, it returns a RequirementDocument.
+        Actual: The tool returns a 404 error even though the issue exists.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps to reproduce the bug. Be specific — "it doesn't work" is not reproducible.
+      placeholder: |
+        1. Start the MCP server with transport=http
+        2. Create a project with slug "test-project"
+        3. Call ingest_github_issue with { projectSlug: "test-project", owner: "org", repo: "repo", issueNumber: 1 }
+        4. Observe error response
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: "The tool should return a RequirementDocument with status 'ready'."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      placeholder: "Returns { status: 'error', message: 'Not Found' }."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "critical — system unusable, data loss, security issue"
+        - "high — major feature broken, no workaround"
+        - "medium — feature partially broken, workaround exists"
+        - "low — minor issue, cosmetic, or edge case"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - Node version:
+        - Transport: stdio / http
+        - OS:
+        - MCP server version (from package.json):
+        - Relevant env vars (redact any secrets):
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or error output
+      description: Paste relevant log output. Redact any API keys or sensitive data.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, links to related issues, anything else relevant.
+    validations:
+      required: false

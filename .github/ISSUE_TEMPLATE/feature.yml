@@ -1,0 +1,139 @@
+name: Feature / Requirement
+description: A new feature or change to existing behaviour. Acceptance criteria are required in Gherkin format.
+title: "[Feature]: "
+labels: ["requirement", "needs-refinement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before you submit
+        A requirement is only ready to implement when **all fields are complete**.
+        Incomplete issues will be labelled `needs-refinement` and will not be picked up.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to be built and why. One clear paragraph.
+      placeholder: "As a [user type], I need [capability] so that [outcome]."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Domain / Feature area
+      description: Which part of the system does this affect?
+      options:
+        - Requirements ingestion
+        - Rule management
+        - Context assembly
+        - API key management
+        - Project management
+        - Transport / Auth
+        - Database / Persistence
+        - CI/CD / Infrastructure
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Implementation language
+      options:
+        - TypeScript
+        - SQL (migration)
+        - YAML (CI/CD)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: |
+        **Required in Gherkin format.** Every scenario must have GIVEN, WHEN, and THEN.
+        Add as many scenarios as needed to cover the feature completely.
+      placeholder: |
+        **Scenario: [Primary happy path]**
+        GIVEN [initial context]
+        WHEN [user or system action]
+        THEN [expected outcome]
+        AND [additional outcome if needed]
+
+        **Scenario: [Edge case or error condition]**
+        GIVEN [initial context]
+        WHEN [edge case or error trigger]
+        THEN [expected behaviour]
+      value: |
+        **Scenario: [Primary happy path]**
+        GIVEN
+        WHEN
+        THEN
+
+        **Scenario: [Error / edge case]**
+        GIVEN
+        WHEN
+        THEN
+    validations:
+      required: true
+
+  - type: textarea
+    id: security-considerations
+    attributes:
+      label: Security considerations
+      description: Does this feature handle sensitive data, authentication, or external input? If none, write "None".
+      placeholder: |
+        e.g. This feature accepts user-supplied file paths — input must be validated and restricted to allowed directories.
+        e.g. None — this is a read-only display change with no data access.
+    validations:
+      required: true
+
+  - type: textarea
+    id: definition-of-ready
+    attributes:
+      label: Definition of Ready checklist
+      description: Confirm all items before marking this issue as ready to implement.
+      value: |
+        - [ ] Description is clear and unambiguous
+        - [ ] All acceptance criteria written in Gherkin format
+        - [ ] Implementation language specified
+        - [ ] Security implications considered
+        - [ ] No unresolved questions or blockers
+        - [ ] Dependencies on other issues noted (if any)
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - critical
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Does this issue depend on another issue or external factor? Link issues with #number.
+      placeholder: "Depends on #42. Blocked by external API availability."
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes
+      description: Anything else Claude Code or a reviewer needs to know.
+    validations:
+      required: false
