@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  ci:
+    uses: forgedTech/.github/.github/workflows/reusable-ci-flutter.yml@main
+    with:
+      flutter-version: '3.x'
+      coverage-threshold: '80'
+      build-android: true
+      # iOS build only on merge to main — macOS runners are expensive
+      build-ios: ${{ github.ref == 'refs/heads/main' }}
+    secrets: inherit

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  ci:
+    uses: forgedTech/.github/.github/workflows/reusable-ci-node.yml@main
+    with:
+      node-version: '20'
+      coverage-threshold: '80'
+      # Alula uses Next.js — adjust commands to match your package.json scripts
+      lint-command: 'npm run lint'
+      typecheck-command: 'npm run typecheck'
+      test-command: 'npm run test:ci'
+      build-command: 'npm run build'
+    secrets: inherit
+
+  # ── Deploy ────────────────────────────────────────────────────────────────
+  # Alula deployment — update to match your hosting (Vercel, Railway, etc.)
+  deploy:
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Add your deployment steps here.
+      # Examples:
+      #   Vercel:  npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
+      #   Railway: railway up --service alula --detach
+      - name: Deploy
+        run: echo "Configure Alula deployment here"

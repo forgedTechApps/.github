@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  ci:
+    uses: forgedTech/.github/.github/workflows/reusable-ci-swift.yml@main
+    with:
+      scheme: 'FORGE'
+      destination: 'platform=iOS Simulator,name=iPhone 15,OS=latest'
+      xcode-version: 'latest-stable'
+      coverage-threshold: '80'
+    secrets: inherit

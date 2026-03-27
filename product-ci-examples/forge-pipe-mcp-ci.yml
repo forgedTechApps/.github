@@ -1,0 +1,91 @@
+name: CI
+
+# Runs on every push to every branch, and every PR targeting main.
+# All jobs must pass before merge to main is possible.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Shared quality gate ───────────────────────────────────────────────────
+  # All gates defined in forgedTech/.github — updated once, applies here automatically.
+  ci:
+    uses: forgedTech/.github/.github/workflows/reusable-ci-node.yml@main
+    with:
+      node-version: '20'
+      coverage-threshold: '80'
+      # forge-pipe-mcp uses vitest workspace — ci:test runs unit + integration
+      test-command: 'npm run test:ci'
+      build-command: 'npm run build'
+    secrets: inherit
+
+  # ── Regression tests ─────────────────────────────────────────────────────
+  # Runs black-box HTTP tests against the built server artifact.
+  # Only on PRs to main and pushes to main — not on every feature branch push.
+  regression:
+    needs: ci
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --frozen-lockfile
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ github.run_id }}
+          path: dist/
+
+      - name: Run regression tests
+        run: npm run test:ci:regression
+        env:
+          NODE_ENV: test
+
+  # ── Deploy ────────────────────────────────────────────────────────────────
+  # Only runs on merge to main, only after ci AND regression pass.
+  deploy:
+    needs: [ci, regression]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        run: railway up --service forge-pipe-mcp --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Post-deploy health check
+        run: |
+          echo "Waiting 30s for deployment..."
+          sleep 30
+          curl --fail --silent --max-time 15 "${{ secrets.RAILWAY_PUBLIC_URL }}/health" \
+            | grep -q '"status":"healthy"' \
+            && echo "✅ Deployment healthy" \
+            || (echo "❌ Health check failed" && exit 1)
