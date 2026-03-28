@@ -27,10 +27,11 @@ Closes #<!-- issue number -->
 
 ## Testing
 
-<!-- Describe what tests cover this change. -->
+<!-- Describe what tests cover this change. Tick what applies. -->
 
 - [ ] Unit tests added / updated
-- [ ] Integration tests added / updated
+- [ ] Integration / widget tests added / updated
+- [ ] UI / E2E tests added / updated
 - [ ] Tested manually (describe how below if non-trivial)
 
 **Manual testing notes:**
@@ -44,28 +45,25 @@ Every item must be checked before requesting review.
 A PR with unchecked items will not be merged.
 
 ### Code quality
-- [ ] No TypeScript errors (`npm run typecheck` passes)
-- [ ] No lint errors (`npm run lint` passes — zero errors)
-- [ ] No new `any` types introduced
-- [ ] No non-null assertions (`!`) without a comment explaining why it's safe
-- [ ] No `console.log` left in production code
+- [ ] No compiler / analyser errors (typecheck, lint, SwiftLint, flutter analyze — whichever applies)
 - [ ] No hardcoded values (strings, numbers, colours) — constants or config only
+- [ ] No debug logging or temporary code left in
+- [ ] No new external dependencies without justification in the PR description
 
 ### Tests
 - [ ] All existing tests pass
 - [ ] New behaviour is covered by tests
-- [ ] Coverage threshold maintained (80% minimum)
+- [ ] Coverage thresholds maintained (unit ≥ 80%, integration ≥ 70%)
 - [ ] Tests cover at least one error case, not only the happy path
 
 ### Security
 - [ ] No secrets committed (API keys, passwords, tokens)
-- [ ] No new external dependencies without justification in PR description
 - [ ] User-supplied input is validated before use
 - [ ] No new data stored without considering the deletion path
 
 ### Documentation
 - [ ] `CLAUDE.md` updated if a new pattern, convention, or architectural decision was introduced
-- [ ] Inline code comments added for non-obvious logic
+- [ ] Inline comments added for non-obvious logic
 - [ ] Breaking changes documented in PR description
 
 ---

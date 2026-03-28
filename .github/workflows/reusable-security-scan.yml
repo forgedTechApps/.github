@@ -10,7 +10,7 @@ name: Reusable — Weekly Security Scan
 #
 #   jobs:
 #     security-scan:
-#       uses: forgedTech/.github/.github/workflows/reusable-security-scan.yml@main
+#       uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
 #       with:
 #         language: javascript-typescript   # or: python, java, csharp, swift
 #         enable-zap: false                 # true only for HTTP servers

@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+
+  # Weekly deep security scan — runs independently of push/PR
+  schedule:
+    - cron: '0 2 * * 0'   # Sunday 02:00 UTC
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,10 +17,24 @@ concurrency:
 jobs:
 
   ci:
-    uses: forgedTech/.github/.github/workflows/reusable-ci-swift.yml@main
+    if: github.event_name != 'schedule'
+    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-swift.yml@v1
     with:
       scheme: 'FORGE'
       destination: 'platform=iOS Simulator,name=iPhone 15,OS=latest'
       xcode-version: 'latest-stable'
-      coverage-threshold: '80'
+      unit-coverage-threshold: '80'
+      integration-coverage-threshold: '70'
+      # UI tests only on merges to main — simulator tests are slow
+      run-ui-tests: ${{ github.ref == 'refs/heads/main' }}
+      ui-test-scheme: 'FORGEUITests'
+    secrets: inherit
+
+  # ── Weekly security scan ─────────────────────────────────────────────────
+  security-scan:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    with:
+      language: swift
+      enable-zap: false
     secrets: inherit

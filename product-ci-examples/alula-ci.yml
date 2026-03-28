@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+
+  # Weekly deep security scan — runs independently of push/PR
+  schedule:
+    - cron: '0 2 * * 0'   # Sunday 02:00 UTC
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,19 +17,72 @@ concurrency:
 jobs:
 
   ci:
-    uses: forgedTech/.github/.github/workflows/reusable-ci-node.yml@main
+    if: github.event_name != 'schedule'
+    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-node.yml@v1
     with:
       node-version: '20'
-      coverage-threshold: '80'
+      unit-coverage-threshold: '80'
+      integration-coverage-threshold: '70'
       # Alula uses Next.js — adjust commands to match your package.json scripts
-      lint-command: 'npm run lint'
-      typecheck-command: 'npm run typecheck'
-      test-command: 'npm run test:ci'
+      unit-test-command: 'npm run test:unit'
+      integration-test-command: 'npm run test:integration'
+      run-e2e: ${{ github.event_name == 'push' }}
+      e2e-test-command: 'npm run test:e2e'
       build-command: 'npm run build'
     secrets: inherit
 
-  # ── Deploy ────────────────────────────────────────────────────────────────
-  # Alula deployment — update to match your hosting (Vercel, Railway, etc.)
+  # ── Weekly security scan ─────────────────────────────────────────────────
+  security-scan:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    with:
+      language: javascript-typescript
+      enable-zap: false
+    secrets: inherit
+
+  # ── Deploy to dev environment ─────────────────────────────────────────────
+  # Alula's deploy target is not yet confirmed. Configure below once decided.
+  # If deploying to Railway, replace this job with the reusable workflow:
+  #
+  #   deploy-dev:
+  #     needs: ci
+  #     if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+  #     uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+  #     with:
+  #       service-name: 'alula-dev'
+  #       environment: 'development'
+  #       run-health-check: false
+  #     secrets: inherit
+  #
+  deploy-dev:
+    needs: ci
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: development
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Add your dev deployment steps here.
+      # Example: npx vercel --token ${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy (dev)
+        run: echo "Configure Alula dev deployment here"
+
+  # ── Deploy to production ──────────────────────────────────────────────────
+  # If deploying to Railway, replace this job with the reusable workflow:
+  #
+  #   deploy:
+  #     needs: ci
+  #     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #     uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+  #     with:
+  #       service-name: 'alula'
+  #       environment: 'production'
+  #       health-check-path: '/health'
+  #     secrets: inherit
+  #
   deploy:
     needs: ci
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -37,7 +94,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Add your deployment steps here.
+      # Add your production deployment steps here.
       # Examples:
       #   Vercel:  npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
       #   Railway: railway up --service alula --detach

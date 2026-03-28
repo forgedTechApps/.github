@@ -5,10 +5,11 @@ name: Reusable — Quality Gate (Flutter / Dart)
 #
 #   jobs:
 #     quality-gate:
-#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-flutter.yml@main
+#       uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-flutter.yml@v1
 #       with:
 #         flutter-version: '3.x'
-#         coverage-threshold: '80'
+#         unit-coverage-threshold: '80'
+#         integration-coverage-threshold: '70'
 #       secrets: inherit
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -22,14 +23,26 @@ on:
         default: '3.x'
         required: false
 
-      coverage-threshold:
-        description: 'Minimum line coverage %'
+      unit-coverage-threshold:
+        description: 'Minimum line coverage % for unit tests'
         type: string
         default: '80'
         required: false
 
+      integration-coverage-threshold:
+        description: 'Minimum line coverage % for integration/widget tests'
+        type: string
+        default: '70'
+        required: false
+
       run-sonar:
         description: 'Run SonarCloud analysis'
+        type: boolean
+        default: true
+        required: false
+
+      run-integration-tests:
+        description: 'Run integration/widget tests (in addition to unit tests)'
         type: boolean
         default: true
         required: false
@@ -44,6 +57,18 @@ on:
         description: 'Run Android build check'
         type: boolean
         default: true
+        required: false
+
+      unit-test-path:
+        description: 'Path(s) passed to flutter test for unit tests'
+        type: string
+        default: 'test/unit/'
+        required: false
+
+      integration-test-path:
+        description: 'Path(s) passed to flutter test for widget/integration tests'
+        type: string
+        default: 'test/widget/ test/integration/'
         required: false
 
       working-directory:
@@ -135,32 +160,59 @@ jobs:
           path: ${{ inputs.working-directory }}/reports/dependency-check
           retention-days: 30
 
-      # ── Gate 5: Tests with coverage ─────────────────────────────────────
-      - name: Flutter test with coverage
-        run: flutter test --coverage --reporter=github
+      # ── Gate 5: Unit tests + coverage ───────────────────────────────────
+      # Pure Dart logic — no platform channels, no widgets, no DB.
+      - name: Run unit tests with coverage
+        run: flutter test ${{ inputs.unit-test-path }} --coverage --reporter=github
 
-      - name: Check coverage threshold
+      - name: Check unit coverage threshold
         run: |
-          # Extract line coverage from lcov.info
           LINES_HIT=$(grep -c "^DA:[0-9]*,1" coverage/lcov.info 2>/dev/null || echo 0)
           LINES_TOTAL=$(grep -c "^DA:" coverage/lcov.info 2>/dev/null || echo 1)
           COVERAGE=$(echo "scale=1; $LINES_HIT * 100 / $LINES_TOTAL" | bc)
-          echo "Coverage: ${COVERAGE}% (threshold: ${{ inputs.coverage-threshold }}%)"
-          if (( $(echo "$COVERAGE < ${{ inputs.coverage-threshold }}" | bc -l) )); then
-            echo "❌ Coverage ${COVERAGE}% is below threshold ${{ inputs.coverage-threshold }}%"
+          echo "Unit coverage: ${COVERAGE}% (threshold: ${{ inputs.unit-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.unit-coverage-threshold }}" | bc -l) )); then
+            echo "❌ Unit coverage ${COVERAGE}% is below threshold ${{ inputs.unit-coverage-threshold }}%"
             exit 1
           fi
-          echo "✅ Coverage ${COVERAGE}% meets threshold"
+          echo "✅ Unit coverage ${COVERAGE}% meets threshold"
 
-      - name: Upload coverage
+      - name: Upload unit coverage
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-${{ github.run_id }}
+          name: unit-coverage-${{ github.run_id }}
           path: ${{ inputs.working-directory }}/coverage
           retention-days: 7
 
-      # ── Gate 6: SonarCloud ──────────────────────────────────────────────
+      # ── Gate 6: Widget / integration tests + coverage ───────────────────
+      # Tests widgets and feature flows with flutter_test / integration_test.
+      - name: Run widget and integration tests with coverage
+        if: inputs.run-integration-tests
+        run: flutter test ${{ inputs.integration-test-path }} --coverage --coverage-path=coverage/lcov-integration.info --reporter=github
+
+      - name: Check integration coverage threshold
+        if: inputs.run-integration-tests
+        run: |
+          LINES_HIT=$(grep -c "^DA:[0-9]*,1" coverage/lcov-integration.info 2>/dev/null || echo 0)
+          LINES_TOTAL=$(grep -c "^DA:" coverage/lcov-integration.info 2>/dev/null || echo 1)
+          COVERAGE=$(echo "scale=1; $LINES_HIT * 100 / $LINES_TOTAL" | bc)
+          echo "Integration coverage: ${COVERAGE}% (threshold: ${{ inputs.integration-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.integration-coverage-threshold }}" | bc -l) )); then
+            echo "❌ Integration coverage ${COVERAGE}% is below threshold ${{ inputs.integration-coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ Integration coverage ${COVERAGE}% meets threshold"
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v4
+        if: inputs.run-integration-tests && always()
+        with:
+          name: integration-coverage-${{ github.run_id }}
+          path: ${{ inputs.working-directory }}/coverage/lcov-integration.info
+          retention-days: 7
+
+      # ── Gate 7: SonarCloud ──────────────────────────────────────────────
       - name: SonarCloud analysis
         if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
         uses: SonarSource/sonarcloud-github-action@master
@@ -168,7 +220,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # ── Gate 7: Android build ───────────────────────────────────────────
+      # ── Gate 8: Android build ───────────────────────────────────────────
       - name: Build Android APK
         if: inputs.build-android
         run: flutter build apk --release --no-pub

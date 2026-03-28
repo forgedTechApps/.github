@@ -1,13 +1,14 @@
 name: CI
 
-# Runs on every push to every branch, and every PR targeting main.
-# All jobs must pass before merge to main is possible.
-
 on:
   push:
-    branches: ['**']
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+
+  # Weekly deep security scan — runs independently of push/PR
+  schedule:
+    - cron: '0 2 * * 0'   # Sunday 02:00 UTC
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -16,23 +17,32 @@ concurrency:
 jobs:
 
   # ── Shared quality gate ───────────────────────────────────────────────────
-  # All gates defined in forgedTech/.github — updated once, applies here automatically.
+  # All gates defined in forgedTechApps/.github — updated once, applies here automatically.
   ci:
-    uses: forgedTech/.github/.github/workflows/reusable-ci-node.yml@main
+    if: github.event_name != 'schedule'
+    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-node.yml@v1
     with:
       node-version: '20'
-      coverage-threshold: '80'
-      # forge-pipe-mcp uses vitest workspace — ci:test runs unit + integration
-      test-command: 'npm run test:ci'
+      unit-coverage-threshold: '80'
+      integration-coverage-threshold: '70'
+      unit-test-command: 'npm run test:unit'
+      integration-test-command: 'npm run test:integration'
+      # E2E only on merges to main or dev — not on every PR
+      run-e2e: ${{ github.event_name == 'push' }}
+      e2e-test-command: 'npm run test:e2e'
       build-command: 'npm run build'
     secrets: inherit
 
   # ── Regression tests ─────────────────────────────────────────────────────
   # Runs black-box HTTP tests against the built server artifact.
-  # Only on PRs to main and pushes to main — not on every feature branch push.
+  # Only on merges to main or dev — not on every PR.
   regression:
     needs: ci
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    if: >
+      github.event_name != 'schedule' && (
+        contains(fromJson('["refs/heads/main", "refs/heads/dev"]'), github.ref) ||
+        contains(fromJson('["main", "dev"]'), github.base_ref)
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -56,36 +66,40 @@ jobs:
           path: dist/
 
       - name: Run regression tests
-        run: npm run test:ci:regression
+        run: npm run test:regression
         env:
           NODE_ENV: test
 
-  # ── Deploy ────────────────────────────────────────────────────────────────
+  # ── Weekly security scan ─────────────────────────────────────────────────
+  security-scan:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    with:
+      language: javascript-typescript
+      enable-zap: true
+      zap-target-url: ${{ secrets.RAILWAY_PUBLIC_URL }}
+    secrets: inherit
+
+  # ── Deploy to dev environment ─────────────────────────────────────────────
+  # Runs on every merge to dev — deploys to local/staging Railway service.
+  deploy-dev:
+    needs: [ci, regression]
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+    uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+    with:
+      service-name: 'forge-pipe-mcp-dev'
+      environment: 'development'
+      run-health-check: false
+    secrets: inherit
+
+  # ── Deploy to production ──────────────────────────────────────────────────
   # Only runs on merge to main, only after ci AND regression pass.
   deploy:
     needs: [ci, regression]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: production
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
-        run: railway up --service forge-pipe-mcp --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      - name: Post-deploy health check
-        run: |
-          echo "Waiting 30s for deployment..."
-          sleep 30
-          curl --fail --silent --max-time 15 "${{ secrets.RAILWAY_PUBLIC_URL }}/health" \
-            | grep -q '"status":"healthy"' \
-            && echo "✅ Deployment healthy" \
-            || (echo "❌ Health check failed" && exit 1)
+    uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+    with:
+      service-name: 'forge-pipe-mcp'
+      environment: 'production'
+      health-check-path: '/health'
+    secrets: inherit

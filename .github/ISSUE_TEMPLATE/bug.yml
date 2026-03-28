@@ -16,8 +16,8 @@ body:
       label: What is broken?
       description: Clear description of the problem. What did you expect? What happened instead?
       placeholder: |
-        Expected: When I call ingest_github_issue with a valid issue number, it returns a RequirementDocument.
-        Actual: The tool returns a 404 error even though the issue exists.
+        Expected: [describe expected behaviour]
+        Actual: [describe what actually happened]
     validations:
       required: true
 
@@ -26,11 +26,6 @@ body:
     attributes:
       label: Steps to reproduce
       description: Exact steps to reproduce the bug. Be specific — "it doesn't work" is not reproducible.
-      placeholder: |
-        1. Start the MCP server with transport=http
-        2. Create a project with slug "test-project"
-        3. Call ingest_github_issue with { projectSlug: "test-project", owner: "org", repo: "repo", issueNumber: 1 }
-        4. Observe error response
       value: |
         1.
         2.
@@ -42,7 +37,6 @@ body:
     id: expected
     attributes:
       label: Expected behaviour
-      placeholder: "The tool should return a RequirementDocument with status 'ready'."
     validations:
       required: true
 
@@ -50,7 +44,6 @@ body:
     id: actual
     attributes:
       label: Actual behaviour
-      placeholder: "Returns { status: 'error', message: 'Not Found' }."
     validations:
       required: true
 
@@ -66,15 +59,29 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: affected-product
+    attributes:
+      label: Affected product
+      options:
+        - FORGE (iOS)
+        - eleven11 (Flutter)
+        - Alula
+        - NetworkPulse
+        - Other
+    validations:
+      required: true
+
   - type: textarea
     id: environment
     attributes:
       label: Environment
+      description: Fill in what is relevant to your product.
       value: |
-        - Node version:
-        - Transport: stdio / http
-        - OS:
-        - MCP server version (from package.json):
+        - Product version:
+        - OS / platform:
+        - Device (if mobile):
+        - Browser (if web):
         - Relevant env vars (redact any secrets):
     validations:
       required: true
@@ -92,6 +99,6 @@ body:
     id: additional
     attributes:
       label: Additional context
-      description: Screenshots, links to related issues, anything else relevant.
+      description: Screenshots, screen recordings, links to related issues, anything else relevant.
     validations:
       required: false

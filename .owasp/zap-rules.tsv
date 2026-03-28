@@ -1,0 +1,41 @@
+# ZAP scan rules file
+# ─────────────────────────────────────────────────────────────────────────────
+# Format: TSV with the following columns (tab-separated):
+#
+#   rule_id   action   url_regex   parameter   evidence   confidence   risk
+#
+# Columns:
+#   rule_id     — ZAP alert/plugin ID (integer). Use 0 to match all rules.
+#   action      — IGNORE (suppress entirely), WARN (report but don't fail), FAIL (fail the scan).
+#   url_regex   — Regular expression matched against the request URL. Use .* to match all URLs.
+#   parameter   — Request parameter name to match (leave blank to match any parameter).
+#   evidence    — Evidence string to match in the alert (leave blank to match any evidence).
+#   confidence  — Confidence level to match: Low, Medium, High, or blank to match all.
+#   risk        — Risk level to match: Informational, Low, Medium, High, or blank to match all.
+#
+# Rules are evaluated top-to-bottom. First match wins.
+# Lines starting with # are comments and are ignored.
+#
+# Reference: https://www.zaproxy.org/docs/desktop/addons/automation-framework/job-activescan/#alertfilters
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 10027 — Information Disclosure - Suspicious Comments
+# False positive: ZAP flags TODO/FIXME comments in JS source maps and minified
+# bundles. These are development artefacts, not sensitive disclosures.
+10027	IGNORE	.*
+
+# 10096 — Timestamp Disclosure
+# Warn rather than fail: timestamps in API responses (e.g. created_at, updated_at)
+# are expected and intentional. Review findings manually before suppressing further.
+10096	WARN	.*
+
+# 90022 — Application Error Disclosure
+# Warn rather than fail: some health-check and status endpoints intentionally
+# surface non-sensitive error states. Review each finding before ignoring.
+90022	WARN	.*
+
+# 10021 — X-Content-Type-Options Header Missing
+# Warn rather than fail: this header should be set but its absence is low risk
+# on API-only services that never serve HTML. Fix at the framework/middleware
+# level rather than suppressing.
+10021	WARN	.*

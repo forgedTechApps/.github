@@ -1,16 +1,30 @@
 name: Reusable — Deploy to Railway
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Called by Node.js repos that deploy to Railway:
+# Called by repos that deploy to Railway. Supports both dev and production.
 #
+# Production deploy:
 #   jobs:
 #     deploy:
-#       uses: forgedTech/.github/.github/workflows/reusable-deploy-railway.yml@main
+#       uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
 #       needs: quality-gate
 #       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 #       with:
 #         service-name: 'my-service'
+#         environment: 'production'
 #         health-check-path: '/health'
+#       secrets: inherit
+#
+# Dev deploy:
+#   jobs:
+#     deploy-dev:
+#       uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+#       needs: quality-gate
+#       if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+#       with:
+#         service-name: 'my-service-dev'
+#         environment: 'development'
+#         run-health-check: false
 #       secrets: inherit
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -22,6 +36,18 @@ on:
         description: 'Railway service name (as shown in Railway dashboard)'
         type: string
         required: true
+
+      environment:
+        description: 'GitHub environment name — "development" or "production"'
+        type: string
+        default: 'production'
+        required: false
+
+      run-health-check:
+        description: 'Run post-deploy health check (disable for dev if no public URL)'
+        type: boolean
+        default: true
+        required: false
 
       health-check-path:
         description: 'Health check endpoint path (e.g. /health)'
@@ -35,12 +61,6 @@ on:
         default: 30
         required: false
 
-      environment:
-        description: 'GitHub environment name for deployment protection'
-        type: string
-        default: 'production'
-        required: false
-
     secrets:
       RAILWAY_TOKEN:
         required: true
@@ -49,7 +69,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy (${{ inputs.service-name }})
+    name: Deploy (${{ inputs.service-name }}) → ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: ${{ inputs.environment }}
@@ -71,7 +91,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Post-deploy health check
-        if: secrets.RAILWAY_PUBLIC_URL != ''
+        if: inputs.run-health-check && secrets.RAILWAY_PUBLIC_URL != ''
         run: |
           echo "Waiting ${{ inputs.health-check-wait-seconds }}s for deployment to stabilise..."
           sleep ${{ inputs.health-check-wait-seconds }}

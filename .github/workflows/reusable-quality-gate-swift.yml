@@ -5,11 +5,13 @@ name: Reusable — Quality Gate (Swift / iOS)
 #
 #   jobs:
 #     quality-gate:
-#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-swift.yml@main
+#       uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-swift.yml@v1
 #       with:
 #         xcode-version: 'latest-stable'
 #         scheme: 'FORGE'
 #         destination: 'platform=iOS Simulator,name=iPhone 15,OS=latest'
+#         unit-coverage-threshold: '80'
+#         integration-coverage-threshold: '70'
 #       secrets: inherit
 #
 # Note: iOS builds require macOS runners — these are 10x the cost of
@@ -39,10 +41,16 @@ on:
         default: 'platform=iOS Simulator,name=iPhone 15,OS=latest'
         required: false
 
-      coverage-threshold:
-        description: 'Minimum line coverage %'
+      unit-coverage-threshold:
+        description: 'Minimum line coverage % for unit tests'
         type: string
         default: '80'
+        required: false
+
+      integration-coverage-threshold:
+        description: 'Minimum line coverage % for UI/integration tests'
+        type: string
+        default: '70'
         required: false
 
       run-sonar:
@@ -55,6 +63,18 @@ on:
         description: 'Run SwiftLint'
         type: boolean
         default: true
+        required: false
+
+      run-ui-tests:
+        description: 'Run UI / integration tests (separate XCUITest scheme)'
+        type: boolean
+        default: false
+        required: false
+
+      ui-test-scheme:
+        description: 'Xcode scheme for UI/integration tests (if separate from unit scheme)'
+        type: string
+        default: ''
         required: false
 
       working-directory:
@@ -109,14 +129,31 @@ jobs:
             swiftlint lint --strict
           fi
 
-      # ── Gate 2: Resolve SPM dependencies ────────────────────────────────
+      # ── Gate 2: Audit Swift Package dependencies ────────────────────────
+      # Checks Package.resolved against the OSV vulnerability database.
+      # Only runs if Package.resolved exists — projects without SPM deps skip this.
+      - name: OSV dependency scan
+        run: |
+          if [ ! -f "Package.resolved" ]; then
+            echo "No Package.resolved found — skipping OSV scan"
+            exit 0
+          fi
+          if which osv-scanner > /dev/null 2>&1; then
+            osv-scanner --lockfile=Package.resolved
+          else
+            echo "Installing osv-scanner..."
+            brew install osv-scanner
+            osv-scanner --lockfile=Package.resolved
+          fi
+
+      # ── Gate 3: Resolve SPM dependencies ────────────────────────────────
       - name: Resolve Swift Package dependencies
         run: |
           xcodebuild -resolvePackageDependencies \
             -scheme "${{ inputs.scheme }}" \
             | grep -E "warning:|error:|resolved" || true
 
-      # ── Gate 3: Build ───────────────────────────────────────────────────
+      # ── Gate 4: Build ───────────────────────────────────────────────────
       - name: Build
         run: |
           xcodebuild build \
@@ -129,52 +166,102 @@ jobs:
               -scheme "${{ inputs.scheme }}" \
               -destination "${{ inputs.destination }}"
 
-      # ── Gate 4: Tests with coverage ─────────────────────────────────────
-      - name: Run tests with coverage
+      # ── Gate 5: Unit tests + coverage ───────────────────────────────────
+      # XCTest unit tests — fast, no UI, no network.
+      - name: Run unit tests with coverage
         run: |
           xcodebuild test \
             -scheme "${{ inputs.scheme }}" \
             -destination "${{ inputs.destination }}" \
             -enableCodeCoverage YES \
-            -resultBundlePath TestResults.xcresult \
+            -resultBundlePath UnitTestResults.xcresult \
+            -only-testing:"${{ inputs.scheme }}Tests" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            | xcpretty --color --report junit --output test-results.xml \
+            | xcpretty --color --report junit --output unit-test-results.xml \
             || xcodebuild test \
               -scheme "${{ inputs.scheme }}" \
               -destination "${{ inputs.destination }}" \
               -enableCodeCoverage YES \
-              -resultBundlePath TestResults.xcresult
+              -resultBundlePath UnitTestResults.xcresult \
+              -only-testing:"${{ inputs.scheme }}Tests"
 
-      - name: Publish test results
+      - name: Publish unit test results
         uses: EnricoMi/publish-unit-test-result-action/macos@v2
         if: always()
         with:
-          files: test-results.xml
-          check_name: 'Test Results (Swift)'
+          files: unit-test-results.xml
+          check_name: 'Unit Test Results (Swift)'
 
-      # Extract coverage from xcresult and check threshold
-      - name: Check coverage threshold
+      - name: Check unit coverage threshold
         run: |
-          # Extract coverage using xcrun xccov
-          COVERAGE=$(xcrun xccov view --report --json TestResults.xcresult 2>/dev/null \
+          COVERAGE=$(xcrun xccov view --report --json UnitTestResults.xcresult 2>/dev/null \
             | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
           targets = data.get('targets', [])
-          # Find the main app target (not test target)
           for t in targets:
             if 'Tests' not in t.get('name', ''):
               cov = t.get('lineCoverage', 0) * 100
               print(f'{cov:.1f}')
               break
           " 2>/dev/null || echo "0")
-          echo "Coverage: ${COVERAGE}% (threshold: ${{ inputs.coverage-threshold }}%)"
-          if (( $(echo "$COVERAGE < ${{ inputs.coverage-threshold }}" | bc -l) )); then
-            echo "❌ Coverage ${COVERAGE}% is below threshold ${{ inputs.coverage-threshold }}%"
+          echo "Unit coverage: ${COVERAGE}% (threshold: ${{ inputs.unit-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.unit-coverage-threshold }}" | bc -l) )); then
+            echo "❌ Unit coverage ${COVERAGE}% is below threshold ${{ inputs.unit-coverage-threshold }}%"
             exit 1
           fi
-          echo "✅ Coverage ${COVERAGE}% meets threshold"
+          echo "✅ Unit coverage ${COVERAGE}% meets threshold"
+
+      # ── Gate 6: UI / integration tests + coverage ────────────────────────
+      # XCUITest — runs on simulator, slower, opt-in.
+      - name: Run UI / integration tests with coverage
+        if: inputs.run-ui-tests
+        run: |
+          UI_SCHEME="${{ inputs.ui-test-scheme || inputs.scheme }}"
+          xcodebuild test \
+            -scheme "${UI_SCHEME}" \
+            -destination "${{ inputs.destination }}" \
+            -enableCodeCoverage YES \
+            -resultBundlePath UITestResults.xcresult \
+            -only-testing:"${UI_SCHEME}UITests" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            | xcpretty --color --report junit --output ui-test-results.xml \
+            || xcodebuild test \
+              -scheme "${UI_SCHEME}" \
+              -destination "${{ inputs.destination }}" \
+              -enableCodeCoverage YES \
+              -resultBundlePath UITestResults.xcresult \
+              -only-testing:"${UI_SCHEME}UITests"
+
+      - name: Publish UI test results
+        uses: EnricoMi/publish-unit-test-result-action/macos@v2
+        if: inputs.run-ui-tests && always()
+        with:
+          files: ui-test-results.xml
+          check_name: 'UI Test Results (Swift)'
+
+      - name: Check UI / integration coverage threshold
+        if: inputs.run-ui-tests
+        run: |
+          COVERAGE=$(xcrun xccov view --report --json UITestResults.xcresult 2>/dev/null \
+            | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          targets = data.get('targets', [])
+          for t in targets:
+            if 'Tests' not in t.get('name', ''):
+              cov = t.get('lineCoverage', 0) * 100
+              print(f'{cov:.1f}')
+              break
+          " 2>/dev/null || echo "0")
+          echo "UI/integration coverage: ${COVERAGE}% (threshold: ${{ inputs.integration-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.integration-coverage-threshold }}" | bc -l) )); then
+            echo "❌ UI/integration coverage ${COVERAGE}% is below threshold ${{ inputs.integration-coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ UI/integration coverage ${COVERAGE}% meets threshold"
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -182,11 +269,13 @@ jobs:
         with:
           name: test-results-${{ github.run_id }}
           path: |
-            ${{ inputs.working-directory }}/TestResults.xcresult
-            ${{ inputs.working-directory }}/test-results.xml
+            ${{ inputs.working-directory }}/UnitTestResults.xcresult
+            ${{ inputs.working-directory }}/UITestResults.xcresult
+            ${{ inputs.working-directory }}/unit-test-results.xml
+            ${{ inputs.working-directory }}/ui-test-results.xml
           retention-days: 7
 
-      # ── Gate 5: SonarCloud ──────────────────────────────────────────────
+      # ── Gate 7: SonarCloud ──────────────────────────────────────────────
       - name: SonarCloud analysis
         if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
         uses: SonarSource/sonarcloud-github-action@master

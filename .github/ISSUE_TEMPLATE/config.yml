@@ -2,6 +2,6 @@ blank_issues_enabled: false
 
 contact_links:
   - name: Security vulnerability disclosure
-    url: https://github.com/forgedTech/forge-pipe-mcp/security/advisories/new
+    url: https://github.com/forgedTechApps/forge-pipe-mcp/security/advisories/new
     about: |
       Report a security vulnerability privately. Do not open a public issue for security findings.

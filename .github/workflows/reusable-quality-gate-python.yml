@@ -5,10 +5,11 @@ name: Reusable — Quality Gate (Python)
 #
 #   jobs:
 #     quality-gate:
-#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-python.yml@main
+#       uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-python.yml@v1
 #       with:
 #         python-version: '3.12'
-#         coverage-threshold: '80'
+#         unit-coverage-threshold: '80'
+#         integration-coverage-threshold: '70'
 #       secrets: inherit
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -22,10 +23,16 @@ on:
         default: '3.12'
         required: false
 
-      coverage-threshold:
-        description: 'Minimum line coverage %'
+      unit-coverage-threshold:
+        description: 'Minimum line coverage % for unit tests'
         type: string
         default: '80'
+        required: false
+
+      integration-coverage-threshold:
+        description: 'Minimum line coverage % for integration tests'
+        type: string
+        default: '70'
         required: false
 
       run-sonar:
@@ -40,16 +47,28 @@ on:
         default: true
         required: false
 
+      run-integration-tests:
+        description: 'Run integration tests (in addition to unit tests)'
+        type: boolean
+        default: true
+        required: false
+
       working-directory:
         description: 'Working directory'
         type: string
         default: '.'
         required: false
 
-      test-path:
-        description: 'Path to tests directory or pytest pattern'
+      unit-test-path:
+        description: 'Path to unit tests'
         type: string
-        default: 'tests/'
+        default: 'tests/unit/'
+        required: false
+
+      integration-test-path:
+        description: 'Path to integration tests'
+        type: string
+        default: 'tests/integration/'
         required: false
 
       source-path:
@@ -94,18 +113,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install from requirements files if present
           if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
           if [ -f "requirements-dev.txt" ]; then pip install -r requirements-dev.txt; fi
           if [ -f "pyproject.toml" ]; then pip install -e ".[dev]" 2>/dev/null || pip install -e .; fi
-          # Ensure core quality tools are available
           pip install \
             pytest pytest-cov pytest-asyncio \
             ruff mypy bandit \
             safety
 
       # ── Gate 1: Ruff lint ───────────────────────────────────────────────
-      # Ruff: fast Python linter, replaces flake8 + isort + pycodestyle
       - name: Ruff lint
         run: ruff check . --output-format=github
 
@@ -126,7 +142,6 @@ jobs:
         if: inputs.run-owasp
         run: |
           safety check --full-report --output text 2>&1 | tee safety-report.txt
-          # Exit code 64 = vulnerabilities found
           EXIT_CODE=${PIPESTATUS[0]}
           if [ $EXIT_CODE -eq 64 ]; then
             echo "❌ Vulnerable dependencies found"
@@ -160,7 +175,6 @@ jobs:
           retention-days: 30
 
       # ── Gate 5: Bandit security scan ────────────────────────────────────
-      # Static analysis for common security issues in Python
       - name: Bandit security scan
         run: |
           bandit -r ${{ inputs.source-path }} \
@@ -184,35 +198,66 @@ jobs:
           print('✅ No high/critical security issues found')
           "
 
-      # ── Gate 6: Tests with coverage ─────────────────────────────────────
-      - name: Run pytest with coverage
+      # ── Gate 6: Unit tests + coverage ───────────────────────────────────
+      # Pure logic — no external services, no DB, no network.
+      - name: Run unit tests with coverage
         run: |
-          pytest ${{ inputs.test-path }} \
+          pytest ${{ inputs.unit-test-path }} \
             --cov=${{ inputs.source-path }} \
-            --cov-report=xml:coverage.xml \
+            --cov-report=xml:coverage-unit.xml \
             --cov-report=term-missing \
-            --cov-fail-under=${{ inputs.coverage-threshold }} \
-            --junitxml=test-results.xml \
+            --cov-fail-under=${{ inputs.unit-coverage-threshold }} \
+            --junitxml=test-results-unit.xml \
             -v
 
-      - name: Publish test results
+      - name: Publish unit test results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          files: test-results.xml
-          check_name: 'Test Results (Python)'
+          files: test-results-unit.xml
+          check_name: 'Unit Test Results (Python)'
 
-      - name: Upload coverage
+      - name: Upload unit coverage
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-${{ github.run_id }}
+          name: unit-coverage-${{ github.run_id }}
           path: |
-            ${{ inputs.working-directory }}/coverage.xml
-            ${{ inputs.working-directory }}/test-results.xml
+            ${{ inputs.working-directory }}/coverage-unit.xml
+            ${{ inputs.working-directory }}/test-results-unit.xml
           retention-days: 7
 
-      # ── Gate 7: SonarCloud ──────────────────────────────────────────────
+      # ── Gate 7: Integration tests + coverage ─────────────────────────────
+      # Hits real services — DB, external APIs. Runs after unit tests pass.
+      - name: Run integration tests with coverage
+        if: inputs.run-integration-tests
+        run: |
+          pytest ${{ inputs.integration-test-path }} \
+            --cov=${{ inputs.source-path }} \
+            --cov-report=xml:coverage-integration.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=${{ inputs.integration-coverage-threshold }} \
+            --junitxml=test-results-integration.xml \
+            -v
+
+      - name: Publish integration test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: inputs.run-integration-tests && always()
+        with:
+          files: test-results-integration.xml
+          check_name: 'Integration Test Results (Python)'
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v4
+        if: inputs.run-integration-tests && always()
+        with:
+          name: integration-coverage-${{ github.run_id }}
+          path: |
+            ${{ inputs.working-directory }}/coverage-integration.xml
+            ${{ inputs.working-directory }}/test-results-integration.xml
+          retention-days: 7
+
+      # ── Gate 8: SonarCloud ──────────────────────────────────────────────
       - name: SonarCloud analysis
         if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
         uses: SonarSource/sonarcloud-github-action@master

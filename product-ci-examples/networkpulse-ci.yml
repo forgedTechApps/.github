@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+
+  # Weekly deep security scan — runs independently of push/PR
+  schedule:
+    - cron: '0 2 * * 0'   # Sunday 02:00 UTC
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,21 +17,29 @@ concurrency:
 jobs:
 
   ci:
-    uses: forgedTech/.github/.github/workflows/reusable-ci-node.yml@main
+    if: github.event_name != 'schedule'
+    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-node.yml@v1
     with:
       node-version: '20'
-      coverage-threshold: '80'
-      test-command: 'npm run test:ci'
-      # Chrome extensions build to a dist/ folder — no server to start
+      unit-coverage-threshold: '80'
+      integration-coverage-threshold: '70'
+      unit-test-command: 'npm run test:unit'
+      integration-test-command: 'npm run test:integration'
+      # Chrome extensions have no E2E server target — disable
+      run-e2e: false
       build-command: 'npm run build'
     secrets: inherit
 
   # ── Extension package verification ───────────────────────────────────────
   # Validates the built extension can be loaded into Chrome.
-  # Runs after ci passes — only on PRs to main and main branch.
+  # Runs after ci passes — only on merges to main or dev.
   validate-extension:
     needs: ci
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    if: >
+      github.event_name != 'schedule' && (
+        contains(fromJson('["refs/heads/main", "refs/heads/dev"]'), github.ref) ||
+        contains(fromJson('["main", "dev"]'), github.base_ref)
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -52,7 +64,6 @@ jobs:
 
       - name: Validate manifest.json
         run: |
-          # Verify manifest exists and has required fields
           node -e "
             const m = require('./dist/manifest.json');
             const required = ['manifest_version', 'name', 'version'];
@@ -76,3 +87,12 @@ jobs:
           if [ "$SIZE" -gt 50000 ]; then
             echo "⚠️  Extension is larger than 50MB — review before publishing"
           fi
+
+  # ── Weekly security scan ─────────────────────────────────────────────────
+  security-scan:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    with:
+      language: javascript-typescript
+      enable-zap: false
+    secrets: inherit

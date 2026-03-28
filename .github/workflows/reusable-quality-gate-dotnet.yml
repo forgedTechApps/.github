@@ -5,11 +5,12 @@ name: Reusable — Quality Gate (.NET 8)
 #
 #   jobs:
 #     quality-gate:
-#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-dotnet.yml@main
+#       uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-dotnet.yml@v1
 #       with:
 #         dotnet-version: '8.0.x'
 #         solution-path: 'MyApp.sln'
-#         coverage-threshold: '80'
+#         unit-coverage-threshold: '80'
+#         integration-coverage-threshold: '70'
 #       secrets: inherit
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -29,16 +30,28 @@ on:
         default: '.'
         required: false
 
-      test-project-pattern:
-        description: 'Glob pattern for test projects'
+      unit-test-project-pattern:
+        description: 'Glob pattern for unit test projects'
         type: string
-        default: '**/*.Tests.csproj'
+        default: '**/*.Unit.Tests.csproj'
         required: false
 
-      coverage-threshold:
-        description: 'Minimum line coverage %'
+      integration-test-project-pattern:
+        description: 'Glob pattern for integration test projects'
+        type: string
+        default: '**/*.Integration.Tests.csproj'
+        required: false
+
+      unit-coverage-threshold:
+        description: 'Minimum line coverage % for unit tests'
         type: string
         default: '80'
+        required: false
+
+      integration-coverage-threshold:
+        description: 'Minimum line coverage % for integration tests'
+        type: string
+        default: '70'
         required: false
 
       run-sonar:
@@ -49,6 +62,12 @@ on:
 
       run-owasp:
         description: 'Run OWASP Dependency-Check'
+        type: boolean
+        default: true
+        required: false
+
+      run-integration-tests:
+        description: 'Run integration tests (in addition to unit tests)'
         type: boolean
         default: true
         required: false
@@ -95,7 +114,6 @@ jobs:
         run: dotnet restore ${{ inputs.solution-path }}
 
       # ── Gate 1: Build ───────────────────────────────────────────────────
-      # Fails: any compiler error or warning treated as error
       - name: Build
         run: |
           dotnet build ${{ inputs.solution-path }} \
@@ -134,50 +152,7 @@ jobs:
           path: ${{ inputs.working-directory }}/reports/dependency-check
           retention-days: 30
 
-      # ── Gate 4: Tests with coverage ─────────────────────────────────────
-      - name: Run tests with coverage
-        run: |
-          dotnet test ${{ inputs.solution-path }} \
-            --no-build \
-            --configuration Release \
-            --logger "trx;LogFileName=test-results.trx" \
-            --logger "console;verbosity=normal" \
-            --collect:"XPlat Code Coverage" \
-            --results-directory TestResults \
-            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
-
-      - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: '**/TestResults/**/*.trx'
-          check_name: 'Test Results (.NET)'
-
-      - name: Check coverage threshold
-        run: |
-          # Parse Cobertura XML for line-rate
-          COVERAGE=$(find TestResults -name "coverage.cobertura.xml" | head -1 | xargs -I{} python3 -c "
-          import xml.etree.ElementTree as ET, sys
-          tree = ET.parse('{}')
-          rate = float(tree.getroot().get('line-rate', 0)) * 100
-          print(f'{rate:.1f}')
-          " 2>/dev/null || echo "0")
-          echo "Coverage: ${COVERAGE}% (threshold: ${{ inputs.coverage-threshold }}%)"
-          if (( $(echo "$COVERAGE < ${{ inputs.coverage-threshold }}" | bc -l) )); then
-            echo "❌ Coverage ${COVERAGE}% below threshold ${{ inputs.coverage-threshold }}%"
-            exit 1
-          fi
-          echo "✅ Coverage ${COVERAGE}% meets threshold"
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-${{ github.run_id }}
-          path: '**/TestResults/**/*.xml'
-          retention-days: 7
-
-      # ── Gate 5: Security audit ──────────────────────────────────────────
+      # ── Gate 4: NuGet vulnerability audit ──────────────────────────────
       - name: dotnet list package --vulnerable
         run: |
           dotnet list ${{ inputs.solution-path }} package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
@@ -188,7 +163,97 @@ jobs:
           fi
           echo "✅ No vulnerable packages found"
 
-      # ── Gate 6: SonarCloud ──────────────────────────────────────────────
+      # ── Gate 5: Unit tests + coverage ───────────────────────────────────
+      # No external services — pure logic only.
+      - name: Run unit tests with coverage
+        run: |
+          dotnet test ${{ inputs.solution-path }} \
+            --no-build \
+            --configuration Release \
+            --filter "Category=Unit|FullyQualifiedName~Unit" \
+            --logger "trx;LogFileName=unit-test-results.trx" \
+            --logger "console;verbosity=normal" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory UnitTestResults \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Publish unit test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: '**/UnitTestResults/**/*.trx'
+          check_name: 'Unit Test Results (.NET)'
+
+      - name: Check unit coverage threshold
+        run: |
+          COVERAGE=$(find UnitTestResults -name "coverage.cobertura.xml" | head -1 | xargs -I{} python3 -c "
+          import xml.etree.ElementTree as ET, sys
+          tree = ET.parse('{}')
+          rate = float(tree.getroot().get('line-rate', 0)) * 100
+          print(f'{rate:.1f}')
+          " 2>/dev/null || echo "0")
+          echo "Unit coverage: ${COVERAGE}% (threshold: ${{ inputs.unit-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.unit-coverage-threshold }}" | bc -l) )); then
+            echo "❌ Unit coverage ${COVERAGE}% below threshold ${{ inputs.unit-coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ Unit coverage ${COVERAGE}% meets threshold"
+
+      - name: Upload unit coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-coverage-${{ github.run_id }}
+          path: '**/UnitTestResults/**/*.xml'
+          retention-days: 7
+
+      # ── Gate 6: Integration tests + coverage ─────────────────────────────
+      # Hits real services — DB, external APIs. Runs after unit tests pass.
+      - name: Run integration tests with coverage
+        if: inputs.run-integration-tests
+        run: |
+          dotnet test ${{ inputs.solution-path }} \
+            --no-build \
+            --configuration Release \
+            --filter "Category=Integration|FullyQualifiedName~Integration" \
+            --logger "trx;LogFileName=integration-test-results.trx" \
+            --logger "console;verbosity=normal" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory IntegrationTestResults \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Publish integration test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: inputs.run-integration-tests && always()
+        with:
+          files: '**/IntegrationTestResults/**/*.trx'
+          check_name: 'Integration Test Results (.NET)'
+
+      - name: Check integration coverage threshold
+        if: inputs.run-integration-tests
+        run: |
+          COVERAGE=$(find IntegrationTestResults -name "coverage.cobertura.xml" | head -1 | xargs -I{} python3 -c "
+          import xml.etree.ElementTree as ET, sys
+          tree = ET.parse('{}')
+          rate = float(tree.getroot().get('line-rate', 0)) * 100
+          print(f'{rate:.1f}')
+          " 2>/dev/null || echo "0")
+          echo "Integration coverage: ${COVERAGE}% (threshold: ${{ inputs.integration-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.integration-coverage-threshold }}" | bc -l) )); then
+            echo "❌ Integration coverage ${COVERAGE}% below threshold ${{ inputs.integration-coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ Integration coverage ${COVERAGE}% meets threshold"
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v4
+        if: inputs.run-integration-tests && always()
+        with:
+          name: integration-coverage-${{ github.run_id }}
+          path: '**/IntegrationTestResults/**/*.xml'
+          retention-days: 7
+
+      # ── Gate 7: SonarCloud ──────────────────────────────────────────────
       - name: SonarCloud analysis
         if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
         uses: SonarSource/sonarcloud-github-action@master

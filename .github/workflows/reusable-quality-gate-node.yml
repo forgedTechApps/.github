@@ -5,10 +5,11 @@ name: Reusable — Quality Gate (Node.js / TypeScript)
 #
 #   jobs:
 #     quality-gate:
-#       uses: forgedTech/.github/.github/workflows/reusable-quality-gate-node.yml@main
+#       uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-node.yml@v1
 #       with:
 #         node-version: '20'
-#         coverage-threshold: '80'
+#         unit-coverage-threshold: '80'
+#         integration-coverage-threshold: '70'
 #       secrets: inherit
 #
 # Inputs let each product repo tune what it needs without forking the workflow.
@@ -25,10 +26,16 @@ on:
         default: '20'
         required: false
 
-      coverage-threshold:
-        description: 'Minimum line coverage % — CI fails below this'
+      unit-coverage-threshold:
+        description: 'Minimum line coverage % for unit tests — CI fails below this'
         type: string
         default: '80'
+        required: false
+
+      integration-coverage-threshold:
+        description: 'Minimum line coverage % for integration tests — CI fails below this'
+        type: string
+        default: '70'
         required: false
 
       run-owasp:
@@ -43,16 +50,40 @@ on:
         default: true
         required: false
 
+      run-e2e:
+        description: 'Run E2E tests (disable on feature branches for speed)'
+        type: boolean
+        default: false
+        required: false
+
       build-command:
-        description: 'Build command (default: npm run build)'
+        description: 'Build command'
         type: string
         default: 'npm run build'
         required: false
 
-      test-command:
-        description: 'Test command with coverage (default: npm run test:ci)'
+      unit-test-command:
+        description: 'Unit test command with coverage'
         type: string
-        default: 'npm run test:ci'
+        default: 'npm run test:unit'
+        required: false
+
+      integration-test-command:
+        description: 'Integration test command with coverage'
+        type: string
+        default: 'npm run test:integration'
+        required: false
+
+      e2e-test-command:
+        description: 'E2E test command'
+        type: string
+        default: 'npm run test:e2e'
+        required: false
+
+      e2e-coverage-threshold:
+        description: 'Minimum line coverage % for E2E tests — set to 0 to disable (opt-in)'
+        type: string
+        default: '0'
         required: false
 
       working-directory:
@@ -141,35 +172,115 @@ jobs:
           path: ${{ inputs.working-directory }}/reports/dependency-check
           retention-days: 30
 
-      # ── Gate 4: Tests + coverage ────────────────────────────────────────
-      - name: Run tests with coverage
-        run: ${{ inputs.test-command }}
+      # ── Gate 4: Unit tests + coverage ───────────────────────────────────
+      # Fast, isolated — no DB, no network. Must pass before integration runs.
+      - name: Run unit tests with coverage
+        run: ${{ inputs.unit-test-command }}
         env:
           NODE_ENV: test
 
-      - name: Publish test results
+      - name: Check unit test coverage threshold
+        run: |
+          COVERAGE=$(node -e "
+            const s = require('./coverage/coverage-summary.json');
+            console.log(s.total.lines.pct);
+          " 2>/dev/null || echo "0")
+          echo "Unit coverage: ${COVERAGE}% (threshold: ${{ inputs.unit-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.unit-coverage-threshold }}" | bc -l) )); then
+            echo "❌ Unit coverage ${COVERAGE}% is below threshold ${{ inputs.unit-coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ Unit coverage ${COVERAGE}% meets threshold"
+
+      - name: Publish unit test results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
           files: |
             **/coverage/junit*.xml
-            **/test-results/*.xml
+            **/test-results/unit*.xml
           comment_mode: always
-          check_name: 'Test Results'
+          check_name: 'Unit Test Results'
 
-      - name: Upload coverage
+      - name: Upload unit coverage
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-${{ github.run_id }}
+          name: unit-coverage-${{ github.run_id }}
           path: ${{ inputs.working-directory }}/coverage
           retention-days: 7
 
-      # ── Gate 5: npm audit ───────────────────────────────────────────────
+      # ── Gate 5: Integration tests + coverage ────────────────────────────
+      # Hits real services (DB, external APIs). Runs after unit tests pass.
+      - name: Run integration tests with coverage
+        run: ${{ inputs.integration-test-command }}
+        env:
+          NODE_ENV: test
+
+      - name: Check integration test coverage threshold
+        run: |
+          COVERAGE=$(node -e "
+            const s = require('./coverage-integration/coverage-summary.json');
+            console.log(s.total.lines.pct);
+          " 2>/dev/null || echo "0")
+          echo "Integration coverage: ${COVERAGE}% (threshold: ${{ inputs.integration-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.integration-coverage-threshold }}" | bc -l) )); then
+            echo "❌ Integration coverage ${COVERAGE}% is below threshold ${{ inputs.integration-coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ Integration coverage ${COVERAGE}% meets threshold"
+
+      - name: Publish integration test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: '**/test-results/integration*.xml'
+          comment_mode: always
+          check_name: 'Integration Test Results'
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-coverage-${{ github.run_id }}
+          path: ${{ inputs.working-directory }}/coverage-integration
+          retention-days: 7
+
+      # ── Gate 6: E2E tests ────────────────────────────────────────────────
+      # Full stack against a running instance. Opt-in per repo/branch.
+      - name: Run E2E tests
+        if: inputs.run-e2e
+        run: ${{ inputs.e2e-test-command }}
+        env:
+          NODE_ENV: test
+
+      - name: Check E2E coverage threshold
+        if: inputs.run-e2e && inputs.e2e-coverage-threshold != '0'
+        run: |
+          COVERAGE=$(node -e "
+            const s = require('./coverage-e2e/coverage-summary.json');
+            console.log(s.total.lines.pct);
+          " 2>/dev/null || echo "0")
+          echo "E2E coverage: ${COVERAGE}% (threshold: ${{ inputs.e2e-coverage-threshold }}%)"
+          if (( $(echo "$COVERAGE < ${{ inputs.e2e-coverage-threshold }}" | bc -l) )); then
+            echo "❌ E2E coverage ${COVERAGE}% is below threshold ${{ inputs.e2e-coverage-threshold }}%"
+            exit 1
+          fi
+          echo "✅ E2E coverage ${COVERAGE}% meets threshold"
+
+      - name: Publish E2E test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: inputs.run-e2e && always()
+        with:
+          files: '**/test-results/e2e*.xml'
+          comment_mode: always
+          check_name: 'E2E Test Results'
+
+      # ── Gate 7: npm audit ───────────────────────────────────────────────
       - name: npm audit
         run: npm audit --audit-level=moderate --omit=dev
 
-      # ── Gate 6: SonarCloud ──────────────────────────────────────────────
+      # ── Gate 8: SonarCloud ──────────────────────────────────────────────
       - name: SonarCloud analysis
         if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
         uses: SonarSource/sonarcloud-github-action@master
@@ -177,7 +288,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # ── Gate 7: Build ───────────────────────────────────────────────────
+      # ── Gate 9: Build ───────────────────────────────────────────────────
       - name: Build
         id: build
         run: ${{ inputs.build-command }}
