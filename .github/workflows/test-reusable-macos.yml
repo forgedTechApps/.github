@@ -55,3 +55,9 @@ jobs:
             ${{ inputs.scheme }}/file2.txt
           retention-days: 7
           if-no-files-found: ignore
+      - name: SonarCloud analysis
+        if: inputs.run-tests
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SONAR_TOKEN: ${{ secrets.TEST_SECRET }}
