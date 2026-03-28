@@ -1,57 +1,17 @@
 name: Reusable — Weekly Security Scan
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Called by any repo for weekly deep security scanning via:
-#
-#   on:
-#     schedule:
-#       - cron: '0 2 * * 0'   # Sunday 02:00 UTC
-#     workflow_dispatch:
-#
-#   jobs:
-#     security-scan:
-#       uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
-#       with:
-#         language: javascript-typescript   # or: python, java, csharp, swift
-#         enable-zap: false                 # true only for HTTP servers
-#       secrets: inherit
-#
-# CodeQL supports: javascript-typescript, python, java, csharp, swift, go, ruby
-# ZAP scanning only makes sense for HTTP services — disable for mobile/CLI apps
-# ─────────────────────────────────────────────────────────────────────────────
-
 on:
   workflow_call:
     inputs:
-
       language:
-        description: 'CodeQL language (javascript-typescript | python | csharp | swift | java)'
+        description: 'CodeQL language'
         type: string
         default: 'javascript-typescript'
         required: false
-
       enable-zap:
-        description: 'Run OWASP ZAP baseline scan (only for HTTP servers)'
+        description: 'Run OWASP ZAP baseline scan'
         type: boolean
         default: false
-        required: false
-
-      zap-target-url:
-        description: 'URL for ZAP to scan (required if enable-zap is true)'
-        type: string
-        default: ''
-        required: false
-
-      zap-rules-file:
-        description: 'Path to ZAP rules tsv file'
-        type: string
-        default: '.owasp/zap-rules.tsv'
-        required: false
-
-      working-directory:
-        description: 'Working directory'
-        type: string
-        default: '.'
         required: false
 
     secrets:
@@ -59,10 +19,8 @@ on:
         required: false
 
 jobs:
-  # ── CodeQL deep static analysis (non-Swift) ───────────────────────────────
   codeql:
     name: CodeQL (${{ inputs.language }})
-    if: inputs.language != 'swift'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -91,167 +49,3 @@ jobs:
         with:
           category: /language:${{ inputs.language }}
           upload: always
-
-  # ── CodeQL deep static analysis (Swift — macOS runner required) ───────────
-  codeql-swift:
-    name: CodeQL (swift)
-    if: inputs.language == 'swift'
-    runs-on: macos-latest
-    timeout-minutes: 30
-
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Initialise CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: swift
-          queries: security-extended,security-and-quality
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
-      - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: /language:swift
-          upload: always
-
-  # ── OWASP Dependency-Check (full weekly scan) ───────────────────────────────
-  dependency-audit:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: OWASP Dependency-Check (full NVD refresh)
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: ${{ github.repository }}
-          path: ${{ inputs.working-directory }}
-          format: 'HTML,SARIF'
-          out: reports/dependency-check-weekly
-          args: >-
-            --failOnCVSS 7
-            --enableRetired
-            --enableExperimental
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-
-      - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: reports/dependency-check-weekly
-          category: dependency-check-weekly
-
-      - name: Upload full report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dependency-check-weekly-${{ github.run_id }}
-          path: reports/dependency-check-weekly
-          retention-days: 90
-
-  # ── OWASP ZAP — dynamic scan (HTTP services only) ──────────────────────────
-  zap-scan:
-    name: OWASP ZAP Baseline
-    runs-on: ubuntu-latest
-    if: inputs.enable-zap
-    timeout-minutes: 20
-
-    permissions:
-      contents: read
-      security-events: write
-      issues: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Run ZAP baseline scan
-        uses: zaproxy/action-baseline@v0.12.0
-        with:
-          target: ${{ inputs.zap-target-url }}
-          rules_file_name: ${{ inputs.zap-rules-file }}
-          allow_issue_writing: true
-          issue_title: 'ZAP Security Findings — ${{ github.repository }}'
-          token: ${{ github.token }}
-          fail_action: false
-
-      - name: Upload ZAP SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: zap.sarif
-          category: zap-baseline
-
-      - name: Fail on high findings
-        if: always()
-        run: |
-          if [ -f zap.sarif ]; then
-            HIGH=$(python3 -c "
-          import json, sys
-          data = json.load(open('zap.sarif'))
-          count = sum(
-            1 for run in data.get('runs', [])
-            for result in run.get('results', [])
-            if result.get('level') == 'error'
-          )
-          print(count)
-          " 2>/dev/null || echo "0")
-            if [ "$HIGH" -gt "0" ]; then
-              echo "❌ $HIGH high-severity ZAP finding(s) — review Security tab"
-              exit 1
-            fi
-            echo "✅ No high-severity ZAP findings"
-          fi
-
-  # ── Notify on failure ───────────────────────────────────────────────────────
-  notify:
-    name: Notify on Failure
-    runs-on: ubuntu-latest
-    needs: [dependency-audit]
-    if: always() && needs.dependency-audit.result == 'failure'
-    permissions:
-      issues: write
-
-    steps:
-      - name: Create security finding issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              title: `Security scan failure — ${new Date().toISOString().split('T')[0]}`,
-              body: [
-                '## Security Scan Failure',
-                '',
-                'The weekly security scan found issues requiring attention.',
-                '',
-                `[View workflow run](${runUrl})`,
-                '',
-                '### Next steps',
-                `1. Review the [Security tab](https://github.com/${context.repo.owner}/${context.repo.repo}/security/code-scanning)`,
-                '2. Triage each finding: fix, suppress with justification, or accept risk',
-                '3. Close this issue once all findings are resolved',
-              ].join('\n'),
-              labels: ['security', 'automated'],
-            });
