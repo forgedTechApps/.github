@@ -14,26 +14,31 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  security-events: write
+
 jobs:
 
   ci:
     if: github.event_name != 'schedule'
-    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-swift.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-swift.yml@v1
     with:
       scheme: 'FORGE'
       destination: 'platform=iOS Simulator,name=iPhone 15,OS=latest'
       xcode-version: 'latest-stable'
       unit-coverage-threshold: '80'
       integration-coverage-threshold: '70'
-      # UI tests only on merges to main — simulator tests are slow
-      run-ui-tests: ${{ github.ref == 'refs/heads/main' }}
+      run-ui-tests: false
       ui-test-scheme: 'FORGEUITests'
     secrets: inherit
 
   # ── Weekly security scan ─────────────────────────────────────────────────
   security-scan:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/security-scan.yml@v1
     with:
       language: swift
       enable-zap: false

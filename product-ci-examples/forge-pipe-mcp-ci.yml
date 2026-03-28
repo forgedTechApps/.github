@@ -20,7 +20,7 @@ jobs:
   # All gates defined in forgedTechApps/.github — updated once, applies here automatically.
   ci:
     if: github.event_name != 'schedule'
-    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-node.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-node.yml@v1
     with:
       node-version: '20'
       unit-coverage-threshold: '80'
@@ -73,7 +73,7 @@ jobs:
   # ── Weekly security scan ─────────────────────────────────────────────────
   security-scan:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/security-scan.yml@v1
     with:
       language: javascript-typescript
       enable-zap: true
@@ -85,7 +85,7 @@ jobs:
   deploy-dev:
     needs: [ci, regression]
     if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
-    uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1
     with:
       service-name: 'forge-pipe-mcp-dev'
       environment: 'development'
@@ -97,7 +97,7 @@ jobs:
   deploy:
     needs: [ci, regression]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1
     with:
       service-name: 'forge-pipe-mcp'
       environment: 'production'

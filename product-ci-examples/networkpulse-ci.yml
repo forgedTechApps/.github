@@ -14,11 +14,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  security-events: write
+
 jobs:
 
   ci:
     if: github.event_name != 'schedule'
-    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-node.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-node.yml@v1
     with:
       node-version: '20'
       unit-coverage-threshold: '80'
@@ -91,7 +97,7 @@ jobs:
   # ── Weekly security scan ─────────────────────────────────────────────────
   security-scan:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/security-scan.yml@v1
     with:
       language: javascript-typescript
       enable-zap: false

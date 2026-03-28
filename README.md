@@ -14,13 +14,13 @@ applies automatically across all repos in the `forgedTechApps` org:
 | `ISSUE_TEMPLATE/feature.yml` | Feature request template — enforces Gherkin AC on all repos |
 | `ISSUE_TEMPLATE/bug.yml` | Bug report template — all repos |
 | `PULL_REQUEST_TEMPLATE.md` | PR quality checklist — all repos |
-| `workflows/reusable-quality-gate-node.yml` | Shared CI pipeline for TypeScript/Node.js |
-| `workflows/reusable-quality-gate-flutter.yml` | Shared CI pipeline for Flutter/Dart |
-| `workflows/reusable-quality-gate-swift.yml` | Shared CI pipeline for Swift/iOS |
-| `workflows/reusable-quality-gate-python.yml` | Shared CI pipeline for Python |
-| `workflows/reusable-quality-gate-dotnet.yml` | Shared CI pipeline for .NET |
-| `workflows/reusable-security-scan.yml` | Weekly deep security scan (CodeQL + OWASP) |
-| `workflows/reusable-deploy-railway.yml` | Optional reusable Railway deploy step |
+| `workflows/quality-gate-node.yml` | Shared CI pipeline for TypeScript/Node.js |
+| `workflows/quality-gate-flutter.yml` | Shared CI pipeline for Flutter/Dart |
+| `workflows/quality-gate-swift.yml` | Shared CI pipeline for Swift/iOS |
+| `workflows/quality-gate-python.yml` | Shared CI pipeline for Python |
+| `workflows/quality-gate-dotnet.yml` | Shared CI pipeline for .NET |
+| `workflows/security-scan.yml` | Weekly deep security scan (CodeQL + OWASP) |
+| `workflows/deploy-railway.yml` | Optional reusable Railway deploy step |
 
 ---
 
@@ -34,7 +34,7 @@ just configure it.
 ```yaml
 jobs:
   ci:
-    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-node.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-node.yml@v1
     with:
       node-version: '20'
       unit-coverage-threshold: '80'
@@ -46,7 +46,7 @@ jobs:
 ```yaml
 jobs:
   ci:
-    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-flutter.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-flutter.yml@v1
     with:
       flutter-version: '3.x'
       unit-coverage-threshold: '80'
@@ -58,7 +58,7 @@ jobs:
 ```yaml
 jobs:
   ci:
-    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-swift.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-swift.yml@v1
     with:
       scheme: 'FORGE'
       unit-coverage-threshold: '80'
@@ -127,7 +127,7 @@ major version tag rather than `@main`.
 
 ## Updating a shared pipeline
 
-Edit the relevant `workflows/reusable-quality-gate-*.yml` file in this repo.
+Edit the relevant `workflows/quality-gate-*.yml` file in this repo.
 Move the `v1` tag to the new commit so all product repos pick up the change on their next CI run.
 No changes needed in product repos for non-breaking updates.
 

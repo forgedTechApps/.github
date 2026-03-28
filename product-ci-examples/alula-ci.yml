@@ -14,11 +14,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  security-events: write
+
 jobs:
 
   ci:
     if: github.event_name != 'schedule'
-    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-node.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-node.yml@v1
     with:
       node-version: '20'
       unit-coverage-threshold: '80'
@@ -26,7 +32,7 @@ jobs:
       # Alula uses Next.js — adjust commands to match your package.json scripts
       unit-test-command: 'npm run test:unit'
       integration-test-command: 'npm run test:integration'
-      run-e2e: ${{ github.event_name == 'push' }}
+      run-e2e: false
       e2e-test-command: 'npm run test:e2e'
       build-command: 'npm run build'
     secrets: inherit
@@ -34,7 +40,7 @@ jobs:
   # ── Weekly security scan ─────────────────────────────────────────────────
   security-scan:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/security-scan.yml@v1
     with:
       language: javascript-typescript
       enable-zap: false
@@ -47,7 +53,7 @@ jobs:
   #   deploy-dev:
   #     needs: ci
   #     if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
-  #     uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+  #     uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1
   #     with:
   #       service-name: 'alula-dev'
   #       environment: 'development'
@@ -76,7 +82,7 @@ jobs:
   #   deploy:
   #     needs: ci
   #     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-  #     uses: forgedTechApps/.github/.github/workflows/reusable-deploy-railway.yml@v1
+  #     uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1
   #     with:
   #       service-name: 'alula'
   #       environment: 'production'

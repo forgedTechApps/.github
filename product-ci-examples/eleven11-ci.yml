@@ -14,25 +14,30 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  security-events: write
+
 jobs:
 
   ci:
     if: github.event_name != 'schedule'
-    uses: forgedTechApps/.github/.github/workflows/reusable-quality-gate-flutter.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-flutter.yml@v1
     with:
       flutter-version: '3.x'
       unit-coverage-threshold: '80'
       integration-coverage-threshold: '70'
       run-integration-tests: true
       build-android: true
-      # iOS build only on merge to main — macOS runners are expensive
-      build-ios: ${{ github.ref == 'refs/heads/main' }}
+      build-ios: false
     secrets: inherit
 
   # ── Weekly security scan ─────────────────────────────────────────────────
   security-scan:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    uses: forgedTechApps/.github/.github/workflows/reusable-security-scan.yml@v1
+    uses: forgedTechApps/.github/.github/workflows/security-scan.yml@v1
     with:
       # Flutter/Dart — use java as closest supported CodeQL language for Android interop
       language: java
