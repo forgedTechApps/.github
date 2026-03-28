@@ -3,9 +3,16 @@ name: Test Reusable macOS
 on:
   workflow_call:
     inputs:
-      greeting:
+      scheme:
         type: string
-        default: 'hello'
+        required: true
+      run-tests:
+        type: boolean
+        default: false
+        required: false
+      coverage-threshold:
+        type: string
+        default: '80'
         required: false
     secrets:
       TEST_SECRET:
@@ -14,8 +21,21 @@ on:
 jobs:
   test:
     runs-on: macos-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     defaults:
       run:
-        working-directory: ${{ inputs.greeting }}
+        working-directory: '.'
     steps:
-      - run: echo "hello"
+      - name: Run tests
+        if: inputs.run-tests
+        run: echo "scheme=${{ inputs.scheme }}"
+      - name: Check coverage
+        if: inputs.run-tests
+        run: |
+          echo "threshold=${{ inputs.coverage-threshold }}"
+      - name: Always run
+        if: always()
+        run: echo "done"
