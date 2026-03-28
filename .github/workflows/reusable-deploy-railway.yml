@@ -91,7 +91,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Post-deploy health check
-        if: inputs.run-health-check && secrets.RAILWAY_PUBLIC_URL != ''
+        if: inputs.run-health-check
         run: |
           echo "Waiting ${{ inputs.health-check-wait-seconds }}s for deployment to stabilise..."
           sleep ${{ inputs.health-check-wait-seconds }}

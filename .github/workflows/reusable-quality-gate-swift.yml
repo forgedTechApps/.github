@@ -277,7 +277,7 @@ jobs:
 
       # ── Gate 7: SonarCloud ──────────────────────────────────────────────
       - name: SonarCloud analysis
-        if: inputs.run-sonar && secrets.SONAR_TOKEN != ''
+        if: inputs.run-sonar
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ github.token }}
