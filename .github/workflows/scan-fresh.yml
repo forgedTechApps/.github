@@ -1,0 +1,51 @@
+name: Reusable — Weekly Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: 'CodeQL language'
+        type: string
+        default: 'javascript-typescript'
+        required: false
+      enable-zap:
+        description: 'Run OWASP ZAP baseline scan'
+        type: boolean
+        default: false
+        required: false
+
+    secrets:
+      NVD_API_KEY:
+        required: false
+
+jobs:
+  codeql:
+    name: CodeQL (${{ inputs.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ inputs.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ inputs.language }}
+          upload: always
