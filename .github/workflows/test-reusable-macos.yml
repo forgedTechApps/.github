@@ -14,5 +14,8 @@ on:
 jobs:
   test:
     runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.greeting }}
     steps:
-      - run: echo "${{ inputs.greeting }}"
+      - run: echo "hello"
