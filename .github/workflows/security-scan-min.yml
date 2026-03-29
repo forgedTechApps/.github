@@ -73,8 +73,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [dependency-audit]
     if: always() && needs.dependency-audit.result == 'failure'
-    permissions:
-      issues: write
 
     steps:
       - name: Echo test
