@@ -18,6 +18,12 @@ name: Reusable — Weekly Security Scan
 #
 # CodeQL supports: javascript-typescript, python, java, csharp, swift, go, ruby
 # ZAP scanning only makes sense for HTTP services — disable for mobile/CLI apps
+#
+# Caller workflow must include in its top-level permissions:
+#   permissions:
+#     contents: read
+#     security-events: write
+#     issues: write         # required for notify job and ZAP issue writing
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -66,10 +72,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-    permissions:
-      contents: read
-      security-events: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -98,10 +100,6 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
 
-    permissions:
-      contents: read
-      security-events: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -128,10 +126,6 @@ jobs:
     name: Dependency Audit
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    permissions:
-      contents: read
-      security-events: write
 
     steps:
       - name: Checkout
@@ -172,11 +166,6 @@ jobs:
     runs-on: ubuntu-latest
     if: inputs.enable-zap
     timeout-minutes: 20
-
-    permissions:
-      contents: read
-      security-events: write
-      issues: write
 
     steps:
       - name: Checkout
@@ -226,8 +215,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [dependency-audit]
     if: always() && needs.dependency-audit.result == 'failure'
-    permissions:
-      issues: write
 
     steps:
       - name: Create security finding issue

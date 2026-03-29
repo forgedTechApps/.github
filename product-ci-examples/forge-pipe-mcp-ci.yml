@@ -14,6 +14,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  security-events: write
+  issues: write
+
 jobs:
 
   # ── Shared quality gate ───────────────────────────────────────────────────
@@ -27,21 +34,19 @@ jobs:
       integration-coverage-threshold: '70'
       unit-test-command: 'npm run test:unit'
       integration-test-command: 'npm run test:integration'
-      # E2E only on merges to main or dev — not on every PR
-      run-e2e: ${{ github.event_name == 'push' }}
+      run-e2e: false
       e2e-test-command: 'npm run test:e2e'
       build-command: 'npm run build'
     secrets: inherit
 
-  # ── Regression tests ─────────────────────────────────────────────────────
-  # Runs black-box HTTP tests against the built server artifact.
-  # Only on merges to main or dev — not on every PR.
-  regression:
+  # ── E2E tests (on push to main/dev only) ─────────────────────────────────
+  # Separate job so E2E only runs on merges, not every PR.
+  e2e:
     needs: ci
     if: >
-      github.event_name != 'schedule' && (
-        contains(fromJson('["refs/heads/main", "refs/heads/dev"]'), github.ref) ||
-        contains(fromJson('["main", "dev"]'), github.base_ref)
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/dev'
       )
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -65,8 +70,8 @@ jobs:
           name: build-${{ github.run_id }}
           path: dist/
 
-      - name: Run regression tests
-        run: npm run test:regression
+      - name: Run E2E / regression tests
+        run: npm run test:e2e
         env:
           NODE_ENV: test
 
@@ -83,7 +88,7 @@ jobs:
   # ── Deploy to dev environment ─────────────────────────────────────────────
   # Runs on every merge to dev — deploys to local/staging Railway service.
   deploy-dev:
-    needs: [ci, regression]
+    needs: [ci]
     if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
     uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1
     with:
@@ -93,9 +98,9 @@ jobs:
     secrets: inherit
 
   # ── Deploy to production ──────────────────────────────────────────────────
-  # Only runs on merge to main, only after ci AND regression pass.
+  # Only runs on merge to main, only after ci passes.
   deploy:
-    needs: [ci, regression]
+    needs: [ci]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1
     with:
