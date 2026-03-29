@@ -18,6 +18,40 @@ on:
         required: false
 
 jobs:
+  codeql:
+    name: CodeQL (${{ inputs.language }})
+    if: inputs.language != 'swift'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Echo test
+        run: echo "CodeQL would run here for ${{ inputs.language }}"
+
+  codeql-swift:
+    name: CodeQL (swift)
+    if: inputs.language == 'swift'
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Echo test
+        run: echo "CodeQL Swift would run here"
+
   dependency-audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
