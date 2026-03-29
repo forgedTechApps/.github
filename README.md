@@ -30,6 +30,20 @@ Each product repo has a thin `.github/workflows/ci.yml` that calls the shared
 pipeline for its stack. The full pipeline logic lives here — product repos
 just configure it.
 
+All caller workflows must include `issues: write` in their top-level `permissions:`
+block — the `security-scan.yml` notify job needs it to create GitHub issues on
+failure, and GitHub free plan does not allow `issues: write` in per-job permissions
+blocks inside reusable workflows.
+
+```yaml
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  security-events: write
+  issues: write          # required for security-scan notify job
+```
+
 **TypeScript repos (Alula, NetworkPulse):**
 ```yaml
 jobs:
