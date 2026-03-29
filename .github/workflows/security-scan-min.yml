@@ -13,21 +13,6 @@ on:
         type: boolean
         default: false
         required: false
-      zap-target-url:
-        description: 'URL for ZAP to scan'
-        type: string
-        default: ''
-        required: false
-      zap-rules-file:
-        description: 'Path to ZAP rules tsv file'
-        type: string
-        default: '.owasp/zap-rules.tsv'
-        required: false
-      working-directory:
-        description: 'Working directory'
-        type: string
-        default: '.'
-        required: false
     secrets:
       NVD_API_KEY:
         required: false
@@ -81,25 +66,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Echo test
-        run: echo "Dependency audit for ${{ inputs.language }}"
-
-  zap-scan:
-    name: OWASP ZAP Baseline
-    runs-on: ubuntu-latest
-    if: inputs.enable-zap
-    timeout-minutes: 20
-
-    permissions:
-      contents: read
-      security-events: write
-      issues: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Echo test
-        run: echo "ZAP scan would run here"
+        run: echo "Dependency audit"
 
   notify:
     name: Notify on Failure
@@ -111,4 +78,4 @@ jobs:
 
     steps:
       - name: Echo test
-        run: echo "Notify would run here"
+        run: echo "Notify"
