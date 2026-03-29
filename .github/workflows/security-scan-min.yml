@@ -17,12 +17,6 @@ on:
       NVD_API_KEY:
         required: false
 
-# Top-level permissions for the entire reusable workflow
-permissions:
-  contents: read
-  security-events: write
-  issues: write
-
 jobs:
   codeql:
     name: CodeQL (${{ inputs.language }})
