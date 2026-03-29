@@ -17,16 +17,18 @@ on:
       NVD_API_KEY:
         required: false
 
+# Top-level permissions for the entire reusable workflow
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
 jobs:
   codeql:
     name: CodeQL (${{ inputs.language }})
     if: inputs.language != 'swift'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    permissions:
-      contents: read
-      security-events: write
 
     steps:
       - name: Checkout
@@ -41,10 +43,6 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
 
-    permissions:
-      contents: read
-      security-events: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,10 +54,6 @@ jobs:
     name: Dependency Audit
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    permissions:
-      contents: read
-      security-events: write
 
     steps:
       - name: Checkout
