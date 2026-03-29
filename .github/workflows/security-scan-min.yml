@@ -1,0 +1,35 @@
+name: Reusable — Security Scan (minimal test)
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: 'CodeQL language'
+        type: string
+        default: 'javascript-typescript'
+        required: false
+      enable-zap:
+        description: 'Run OWASP ZAP baseline scan'
+        type: boolean
+        default: false
+        required: false
+    secrets:
+      NVD_API_KEY:
+        required: false
+
+jobs:
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Echo test
+        run: echo "Dependency audit would run here for ${{ inputs.language }}"
