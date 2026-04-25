@@ -7,6 +7,7 @@ import { z } from "zod";
 import { minimatch } from "minimatch";
 import { loadStandards, StandardsError } from "./standards.js";
 import { checkCiSetup } from "./check-ci.js";
+import { checkBranching } from "./check-branching.js";
 import { generateCi, type CiKind, type Language } from "./init-repo.js";
 
 export interface CreateServerOptions {
@@ -45,6 +46,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
     paths: z.array(z.string()),
   });
   const CheckCiSetupArgs = z.object({ repo_root: RepoRoot });
+  const CheckBranchingArgs = z.object({ repo_root: RepoRoot });
   const InitRepoArgs = z.object({
     language: z.enum(["swift", "flutter", "node", "python", "dotnet", "mixed"]),
     kind: z.enum(["service", "library", "mobile", "web"]),
@@ -103,6 +105,18 @@ export function createServer(options: CreateServerOptions = {}): Server {
         },
       },
       {
+        name: "check_branching",
+        description:
+          "Validate the repo against its branching policy: required branches exist on origin " +
+          "(default: main + dev), the default branch matches, and the current branch name conforms " +
+          "to the feature-branch pattern. Degrades to warnings when offline or remote unreachable.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
         name: "init_repo",
         description:
           "Generate a proposed `.github/workflows/ci.yml` for a repo that lacks one. Returns text only — " +
@@ -137,6 +151,14 @@ export function createServer(options: CreateServerOptions = {}): Server {
         const args = CheckCiSetupArgs.parse(req.params.arguments ?? {});
         const standards = await loadStandards(args.repo_root);
         const findings = await checkCiSetup(args.repo_root, standards);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "check_branching") {
+        const args = CheckBranchingArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkBranching(args.repo_root, standards);
         const isError = findings.some((f) => f.severity === "error");
         return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
       }

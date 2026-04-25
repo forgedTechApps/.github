@@ -21,6 +21,7 @@ the agent reads them before doing anything.
 | Architecture standards           | `architecture.rules:` + sensitive paths | MCP        |
 | Investigate before change        | `investigation.mode: hard`         | MCP             |
 | **Every repo has CI**            | `check_ci_setup` + `init_repo`     | MCP             |
+| **Branching strategy**           | `check_branching` (main + dev)     | MCP             |
 | Test execution before deploy     | `deploy.needs: [ci]` in caller CI  | GitHub Actions  |
 | High test coverage               | `*-coverage-threshold` inputs      | quality-gate-*  |
 | Vulnerability scans              | OSV / OWASP step in quality-gate-* | quality-gate-*  |
@@ -110,6 +111,22 @@ These are not negotiable for any product repo:
      -F required_pull_request_reviews.required_approving_review_count=1 \
      -F restrictions=
    ```
+
+## Mandatory rule: branching strategy
+
+Every forgedTechApps repo must have a **`main`** and **`dev`** branch on its
+remote, and the remote default branch must be `main`. Feature work happens
+on prefix-named branches (`feat/...`, `fix/...`, `chore/...`, etc.) and is
+PR'd into `dev`; releases promote `dev` → `main`.
+
+`mcp.check_branching` enforces this. Run it at task start alongside
+`check_ci_setup`. By default violations are warnings (`mode: soft`); set
+`mode: hard` in `.agent-standards.yml` for repos where wrong branches are
+expensive (production services, anything with a deploy gate keyed on `main`).
+
+When bootstrapping a new repo, pass `--ensure-branches` to `init-project`
+to have the scaffolder create the `dev` branch (and push it if a remote
+is configured).
 
 ## How an agent uses this
 

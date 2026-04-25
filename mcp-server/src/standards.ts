@@ -39,6 +39,12 @@ export interface AgentStandards {
     kind: "service" | "library" | "mobile" | "web";
     deploy_target?: "railway" | "vercel" | "app-store" | "play-store" | "none";
   };
+  branching?: {
+    required_branches?: string[];
+    default_branch?: string;
+    feature_branch_pattern?: string;
+    mode?: "soft" | "hard";
+  };
 }
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });

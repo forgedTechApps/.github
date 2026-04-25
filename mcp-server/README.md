@@ -34,6 +34,19 @@ Args: `{ repo_root: string }`
 Call this **at task start in every repo, before any other work**. If errors
 are returned, fix them first.
 
+### `check_branching`
+
+Validate the repo against its branching policy:
+
+- Required branches exist on origin (default: `main` + `dev`)
+- The remote default branch matches `branching.default_branch`
+- Current branch name matches `branching.feature_branch_pattern` (or is one of the required branches)
+
+Args: `{ repo_root: string }`
+
+Degrades gracefully when offline or remote is unreachable — emits warnings
+instead of erroring. `branching.mode: hard` upgrades real violations to errors.
+
 ### `init_repo`
 
 Generate a proposed `.github/workflows/ci.yml` for a repo that lacks one.
@@ -108,6 +121,7 @@ Currently shipped:
 - `get_standards` — load + validate
 - `check_paths` — gate detection
 - `check_ci_setup` — workflow validation against standards
+- `check_branching` — required branches + feature-branch-name policy
 - `init_repo` — scaffold canonical CI for service/library/mobile/web
 
 Next pass (designed, not built):

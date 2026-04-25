@@ -25,7 +25,11 @@
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exec as execCb } from "node:child_process";
+import { promisify } from "node:util";
 import { generateCi, type CiKind, type Language } from "../mcp-server/src/init-repo.js";
+
+const execp = promisify(execCb);
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -46,16 +50,19 @@ interface Args {
   deployTarget?: string;
   force: boolean;
   skipCi: boolean;
+  ensureBranches: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
   const map = new Map<string, string>();
   let force = false;
   let skipCi = false;
+  let ensureBranches = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--force") { force = true; continue; }
     if (a === "--skip-ci") { skipCi = true; continue; }
+    if (a === "--ensure-branches") { ensureBranches = true; continue; }
     if (!a?.startsWith("--")) continue;
     const key = a.slice(2);
     const val = argv[++i];
@@ -92,7 +99,43 @@ function parseArgs(argv: string[]): Args {
     deployTarget: map.get("deploy-target"),
     force,
     skipCi,
+    ensureBranches,
   };
+}
+
+async function ensureDevBranch(repoRoot: string): Promise<string> {
+  // Best-effort: create a local 'dev' branch if missing. Push to origin if there is one.
+  try {
+    await execp(`git rev-parse --is-inside-work-tree`, { cwd: repoRoot });
+  } catch {
+    return "skipped (not a git repo)";
+  }
+  try {
+    await execp(`git rev-parse --verify dev`, { cwd: repoRoot });
+    return "already present locally";
+  } catch {
+    /* fall through to create */
+  }
+  try {
+    await execp(`git branch dev`, { cwd: repoRoot });
+  } catch (err) {
+    return `failed to create dev: ${(err as Error).message.split("\n")[0]}`;
+  }
+  // Try to push if there's a remote.
+  try {
+    const { stdout } = await execp(`git remote`, { cwd: repoRoot });
+    if (stdout.trim()) {
+      try {
+        await execp(`git push -u origin dev`, { cwd: repoRoot });
+        return "created locally and pushed to origin";
+      } catch (err) {
+        return `created locally; push failed: ${(err as Error).message.split("\n")[0]}`;
+      }
+    }
+  } catch {
+    /* no remote */
+  }
+  return "created locally (no remote)";
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -199,6 +242,11 @@ async function main(): Promise<void> {
   for (const [path, content] of writes) {
     const status = await writeIfAbsent(path, content, args.force);
     console.log(`  ${status === "written" ? "✓ wrote   " : "→ skipped "} ${path}`);
+  }
+
+  if (args.ensureBranches) {
+    const result = await ensureDevBranch(args.target);
+    console.log(`\nBranching: dev branch — ${result}`);
   }
 
   console.log("\nNotes from CI generator:");

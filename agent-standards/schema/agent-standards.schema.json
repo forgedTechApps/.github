@@ -118,6 +118,36 @@
       "items": { "type": "string" }
     },
 
+    "branching": {
+      "type": "object",
+      "description": "Branching strategy. check_branching validates the repo against this.",
+      "additionalProperties": false,
+      "properties": {
+        "required_branches": {
+          "type": "array",
+          "description": "Branches that must exist on the remote. Default ['main', 'dev'].",
+          "items": { "type": "string" },
+          "default": ["main", "dev"]
+        },
+        "default_branch": {
+          "type": "string",
+          "description": "Branch new clones check out. Default 'main'.",
+          "default": "main"
+        },
+        "feature_branch_pattern": {
+          "type": "string",
+          "description": "Regex feature branches must match. Empty disables the check.",
+          "default": "^(feat|fix|chore|docs|test|ci|refactor)/[a-z0-9._-]+$"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["soft", "hard"],
+          "default": "soft",
+          "description": "soft: violations are warnings. hard: violations are errors."
+        }
+      }
+    },
+
     "ci": {
       "type": "object",
       "description": "Required CI shape for this repo. check_ci_setup validates the workflow file matches.",

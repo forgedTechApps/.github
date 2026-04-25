@@ -47,3 +47,9 @@ context_pointers:
 ci:
   kind: service
   deploy_target: railway
+
+branching:
+  required_branches: [main, dev]
+  default_branch: main
+  feature_branch_pattern: "^(feat|fix|chore|docs|test|ci|refactor)/[a-z0-9._-]+$"
+  mode: soft
