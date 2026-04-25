@@ -1,0 +1,15 @@
+{
+  "name": "forgedtech-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "init-project": "tsx scripts/init-project.ts",
+    "build": "pnpm --filter ./mcp-server build"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@10.17.0"
+}

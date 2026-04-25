@@ -1,0 +1,51 @@
+version: 1
+repo: ${REPO}
+language: ${LANGUAGE}
+
+stack:
+  package_manager: ${PACKAGE_MANAGER}
+  test_runner: ${TEST_RUNNER}
+  lint: ${LINT}
+  format: ${FORMAT}
+  build: ${BUILD}
+
+style:
+  - Replace with project-specific style rules.
+
+architecture:
+  rules:
+    - Networking through a single client — no ad-hoc HTTP from views.
+    - Persistence through repository protocols — no direct DB access from views.
+    - Cross-feature navigation owned by coordinators — features must not import each other.
+  feature_path_pattern: "Features/<Name>/"
+  sensitive_paths:
+    - "Coordinators/**"
+    - "Networking/**"
+    - "Persistence/**"
+
+test_coverage:
+  unit_min: ${UNIT_COVERAGE}
+  integration_min: ${INTEGRATION_COVERAGE}
+  regression_required_for:
+    - "Networking/**"
+    - "Persistence/**"
+
+review:
+  explicit_approval_required_for:
+    - "Coordinators/**"
+    - "Persistence/Migrations/**"
+    - ".github/workflows/**"
+  no_force_push_branches:
+    - main
+    - dev
+
+investigation:
+  mode: soft
+  min_read_write_ratio: 3
+
+context_pointers:
+  - README.md
+
+ci:
+  kind: mobile
+  deploy_target: ${DEPLOY_TARGET}

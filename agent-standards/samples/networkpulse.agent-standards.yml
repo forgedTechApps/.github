@@ -1,0 +1,62 @@
+# Sample .agent-standards.yml for forgedTechApps/NetworkPulse (Node.js + Python monorepo).
+
+version: 1
+repo: forgedTechApps/NetworkPulse
+language: mixed
+
+stack:
+  package_manager: pnpm
+  test_runner: pnpm test
+  lint: pnpm lint
+  format: pnpm format
+  build: pnpm build
+
+style:
+  - TypeScript: no `any` — use `unknown` and narrow.
+  - Python: type hints required on public functions.
+  - Prefer dependency injection; avoid module-level singletons.
+  - Each app keeps its own tsconfig — do not hoist to root.
+
+architecture:
+  rules:
+    - apps/web is Next.js, apps/extension is the Chrome MV3 build, apps/api is FastAPI/Python.
+    - Cross-app code lives in packages/* — apps must not import from each other directly.
+    - Database access is through repositories in apps/api/src/repositories/.
+  feature_path_pattern: "apps/<app>/src/features/<Name>/"
+  sensitive_paths:
+    - "apps/api/src/auth/**"
+    - "apps/api/alembic/versions/**"
+    - "apps/extension/manifest.json"
+    - ".github/workflows/**"
+
+test_coverage:
+  unit_min: 80
+  integration_min: 70
+  regression_required_for:
+    - "apps/api/src/auth/**"
+    - "apps/api/src/repositories/**"
+    - "apps/extension/src/background/**"
+
+review:
+  explicit_approval_required_for:
+    - "apps/api/alembic/versions/**"
+    - "apps/extension/manifest.json"
+    - ".github/workflows/**"
+    - "**/Dockerfile"
+  no_force_push_branches:
+    - main
+    - dev
+
+investigation:
+  mode: hard
+  min_read_write_ratio: 4
+
+context_pointers:
+  - README.md
+  - apps/api/README.md
+  - apps/web/README.md
+  - apps/extension/README.md
+
+ci:
+  kind: service
+  deploy_target: railway

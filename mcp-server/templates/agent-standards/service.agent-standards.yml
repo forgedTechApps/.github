@@ -1,0 +1,49 @@
+version: 1
+repo: ${REPO}
+language: ${LANGUAGE}
+
+stack:
+  package_manager: ${PACKAGE_MANAGER}
+  test_runner: ${TEST_RUNNER}
+  lint: ${LINT}
+  format: ${FORMAT}
+  build: ${BUILD}
+
+style:
+  - Replace these with project-specific style rules.
+  - One rule per line, plain English. Agents read these at task start.
+
+architecture:
+  rules:
+    - Replace with architectural constraints. Violating these requires user approval.
+  feature_path_pattern: "src/features/<Name>/"
+  sensitive_paths:
+    - "src/auth/**"
+    - "src/migrations/**"
+    - ".github/workflows/**"
+
+test_coverage:
+  unit_min: ${UNIT_COVERAGE}
+  integration_min: ${INTEGRATION_COVERAGE}
+  regression_required_for:
+    - "src/auth/**"
+
+review:
+  explicit_approval_required_for:
+    - "src/migrations/**"
+    - ".github/workflows/**"
+    - "**/Dockerfile"
+  no_force_push_branches:
+    - main
+    - dev
+
+investigation:
+  mode: soft
+  min_read_write_ratio: 3
+
+context_pointers:
+  - README.md
+
+ci:
+  kind: service
+  deploy_target: railway

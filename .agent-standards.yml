@@ -1,0 +1,54 @@
+version: 1
+repo: forgedTechApps/.github
+language: node
+
+stack:
+  package_manager: pnpm
+  test_runner: "pnpm --filter ./mcp-server test"
+  lint: "pnpm --filter ./mcp-server lint"
+  format: prettier
+  build: "pnpm --filter ./mcp-server build"
+
+style:
+  - This repo is the org-wide source of truth for CI/CD and agent standards.
+  - Changes to .github/workflows/ ship to every product repo via the @v1 tag — be deliberate.
+  - The MCP server in mcp-server/ is published as @forgedtech/agent-standards-mcp; treat it as a library API.
+
+architecture:
+  rules:
+    - Reusable workflows MUST avoid actions:read and issues:write in job-level permissions blocks (GitHub free plan restriction — both cause startup_failure).
+    - No dynamic `runs-on` expressions in reusable workflows — split into separate jobs with static runner labels.
+    - No `${{ }}` boolean expressions in `with:` blocks for `workflow_call` boolean inputs — use literal true/false.
+    - Caller workflows must include `issues: write` in their top-level permissions block.
+    - Bumping the `v1` tag affects every product repo immediately — coordinate before pushing.
+  sensitive_paths:
+    - ".github/workflows/**"
+    - "mcp-server/src/**"
+    - "agent-standards/schema/**"
+    - "scripts/**"
+
+test_coverage:
+  unit_min: 0
+  integration_min: 0
+
+review:
+  explicit_approval_required_for:
+    - ".github/workflows/**"
+    - "agent-standards/schema/**"
+    - "scripts/**"
+  no_force_push_branches:
+    - main
+    - dev
+
+investigation:
+  mode: hard
+  min_read_write_ratio: 4
+
+context_pointers:
+  - README.md
+  - agent-standards/README.md
+  - mcp-server/README.md
+
+ci:
+  kind: library
+  deploy_target: none

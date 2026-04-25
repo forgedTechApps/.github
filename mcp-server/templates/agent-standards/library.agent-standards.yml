@@ -1,0 +1,41 @@
+version: 1
+repo: ${REPO}
+language: ${LANGUAGE}
+
+stack:
+  package_manager: ${PACKAGE_MANAGER}
+  test_runner: ${TEST_RUNNER}
+  lint: ${LINT}
+  format: ${FORMAT}
+  build: ${BUILD}
+
+style:
+  - Replace with project-specific style rules.
+
+architecture:
+  rules:
+    - Replace with architectural constraints.
+  sensitive_paths:
+    - ".github/workflows/**"
+
+test_coverage:
+  unit_min: ${UNIT_COVERAGE}
+  integration_min: ${INTEGRATION_COVERAGE}
+
+review:
+  explicit_approval_required_for:
+    - ".github/workflows/**"
+  no_force_push_branches:
+    - main
+    - dev
+
+investigation:
+  mode: soft
+  min_read_write_ratio: 3
+
+context_pointers:
+  - README.md
+
+ci:
+  kind: library
+  deploy_target: none

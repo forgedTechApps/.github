@@ -1,0 +1,60 @@
+# Sample .agent-standards.yml for forgedTechApps/forge (Swift/iOS).
+# Drop this at the repo root as `.agent-standards.yml`.
+
+version: 1
+repo: forgedTechApps/forge
+language: swift
+
+stack:
+  package_manager: swiftpm
+  test_runner: xcodebuild test
+  lint: swiftlint
+  format: swift-format
+  build: xcodebuild build
+
+style:
+  - Prefer struct over class unless reference semantics are required.
+  - SwiftUI views must stay under 200 lines — extract subviews when growing.
+  - No force-unwraps (!) outside test targets.
+  - Use async/await; avoid completion-handler APIs in new code.
+  - Prefer @Observable over ObservableObject for new view models (iOS 17+).
+
+architecture:
+  rules:
+    - Networking goes through APIClient — never call URLSession directly.
+    - Persistence goes through Repository protocols — never call Core Data / SwiftData directly from views.
+    - Cross-feature navigation is owned by Coordinators — features must not import each other.
+  feature_path_pattern: "FORGE/Features/<Name>/"
+  sensitive_paths:
+    - "FORGE/Coordinators/**"
+    - "FORGE/Networking/APIClient.swift"
+    - "FORGE/Persistence/**"
+
+test_coverage:
+  unit_min: 80
+  integration_min: 70
+  regression_required_for:
+    - "FORGE/Features/**/ViewModel*.swift"
+    - "FORGE/Networking/**"
+
+review:
+  explicit_approval_required_for:
+    - "FORGE/Coordinators/**"
+    - "FORGE/Persistence/Migrations/**"
+    - ".github/workflows/**"
+  no_force_push_branches:
+    - main
+    - dev
+
+investigation:
+  mode: soft
+  min_read_write_ratio: 3
+
+context_pointers:
+  - README.md
+  - FORGE/ARCHITECTURE.md
+  - FORGE/Coordinators/AppCoordinator.swift
+
+ci:
+  kind: mobile
+  deploy_target: app-store

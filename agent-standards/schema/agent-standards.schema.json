@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/forgedTechApps/.github/agent-standards/schema/agent-standards.schema.json",
+  "title": "ForgedTech Agent Standards",
+  "description": "Per-repo rules and context that AI agents must read before making changes.",
+  "type": "object",
+  "required": ["version", "repo", "language"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Bump when making breaking schema changes."
+    },
+    "repo": {
+      "type": "string",
+      "description": "Repo name in 'org/repo' form. Used by the MCP to confirm correct file."
+    },
+    "language": {
+      "type": "string",
+      "enum": ["swift", "flutter", "node", "python", "dotnet", "mixed"],
+      "description": "Primary language. Selects which CI quality gate applies."
+    },
+    "stack": {
+      "type": "object",
+      "description": "Concrete tooling. Helps the agent pick the right commands.",
+      "additionalProperties": false,
+      "properties": {
+        "package_manager": { "type": "string", "enum": ["pnpm", "npm", "yarn", "uv", "pip", "swiftpm", "pub", "nuget"] },
+        "test_runner":     { "type": "string" },
+        "lint":            { "type": "string" },
+        "format":          { "type": "string" },
+        "build":           { "type": "string" }
+      }
+    },
+
+    "style": {
+      "type": "array",
+      "description": "Coding style rules in plain English. Read by the agent at task start.",
+      "items": { "type": "string" }
+    },
+
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "array",
+          "description": "Architectural constraints. Violating these requires explicit user approval.",
+          "items": { "type": "string" }
+        },
+        "feature_path_pattern": {
+          "type": "string",
+          "description": "Glob describing where new features live, e.g. 'apps/*/Features/<Name>/'."
+        },
+        "sensitive_paths": {
+          "type": "array",
+          "description": "Paths where 'hard mode' applies — agent must justify changes against the recorded hypothesis. Glob patterns.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "test_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "unit_min":        { "type": "integer", "minimum": 0, "maximum": 100 },
+        "integration_min": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "regression_required_for": {
+          "type": "array",
+          "description": "Path globs that require an accompanying regression test on change.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "explicit_approval_required_for": {
+          "type": "array",
+          "description": "Path globs where the agent must pause for user approval before writing.",
+          "items": { "type": "string" }
+        },
+        "no_force_push_branches": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["main", "dev"]
+        }
+      }
+    },
+
+    "investigation": {
+      "type": "object",
+      "description": "Controls the hypothesis-first protocol enforced by mcp.start_task / mcp.propose_change.",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["soft", "hard"],
+          "default": "soft",
+          "description": "soft: hypothesis recorded but not blocking. hard: propose_change blocks if written files weren't read during investigation."
+        },
+        "min_read_write_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "default": 3,
+          "description": "Warn if reads/writes drops below this for a non-trivial task."
+        }
+      }
+    },
+
+    "context_pointers": {
+      "type": "array",
+      "description": "Files the agent should read at task start to understand the repo. Keep this short — these are loaded eagerly.",
+      "items": { "type": "string" }
+    },
+
+    "ci": {
+      "type": "object",
+      "description": "Required CI shape for this repo. check_ci_setup validates the workflow file matches.",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["service", "library", "mobile", "web"],
+          "description": "service: API/backend with deploy. library: code-only, no deploy. mobile: iOS/Android/Flutter, ships via app stores. web: Next.js/Vite SPA, deploys via Railway/Vercel."
+        },
+        "deploy_target": {
+          "type": "string",
+          "enum": ["railway", "vercel", "app-store", "play-store", "none"],
+          "default": "none"
+        }
+      }
+    }
+  }
+}
