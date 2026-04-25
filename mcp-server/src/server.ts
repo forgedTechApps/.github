@@ -2,6 +2,8 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { minimatch } from "minimatch";
@@ -34,7 +36,16 @@ const PACKAGE_VERSION = "0.1.0";
 export function createServer(options: CreateServerOptions = {}): Server {
   const { defaultRepoRoot, name = "forgedtech-agent-standards", version = PACKAGE_VERSION } = options;
 
-  const server = new Server({ name, version }, { capabilities: { tools: {} } });
+  // Declare empty resources/prompts capabilities so clients don't issue
+  // resources/list or prompts/list requests at all. Some clients ignore the
+  // capability map and ask anyway; we register no-op handlers below for those.
+  const server = new Server(
+    { name, version },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } }
+  );
+
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [] }));
 
   const RepoRoot = defaultRepoRoot
     ? z.string().default(defaultRepoRoot)
