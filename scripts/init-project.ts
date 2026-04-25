@@ -5,7 +5,7 @@
  * Bootstraps a project (new or existing) with:
  *   - .github/workflows/ci.yml (canonical, from generateCi)
  *   - .agent-standards.yml (template per kind)
- *   - .claude/settings.json (registers the agent-standards MCP)
+ *   - .mcp.json (registers the agent-standards MCP — Claude Code project-shared config)
  *
  * Usage:
  *   pnpm tsx scripts/init-project.ts \
@@ -187,19 +187,32 @@ function applyTemplate(template: string, vars: Record<string, string>): string {
   });
 }
 
-function claudeSettings(repoRoot: string, mcpBin: string, projectName: string): string {
-  return JSON.stringify(
-    {
-      mcpServers: {
-        "agent-standards": {
-          command: "node",
-          args: [mcpBin, "--repo-root", repoRoot, "--name", `agent-standards/${projectName}`],
-        },
-      },
-    },
-    null,
-    2
-  ) + "\n";
+/**
+ * Merge an agent-standards entry into an existing .mcp.json without disturbing
+ * other server entries. Returns the resulting JSON string.
+ */
+async function mergeMcpJson(
+  path: string,
+  repoRoot: string,
+  mcpBin: string,
+  projectName: string
+): Promise<string> {
+  let cfg: { mcpServers?: Record<string, unknown> } = { mcpServers: {} };
+  if (await exists(path)) {
+    try {
+      cfg = JSON.parse(await readFile(path, "utf8"));
+    } catch {
+      // If the existing file is malformed, fall back to overwriting.
+      cfg = { mcpServers: {} };
+    }
+  }
+  cfg.mcpServers ??= {};
+  cfg.mcpServers["agent-standards"] = {
+    type: "stdio",
+    command: "node",
+    args: [mcpBin, "--repo-root", repoRoot, "--name", `agent-standards/${projectName}`],
+  };
+  return JSON.stringify(cfg, null, 2) + "\n";
 }
 
 async function main(): Promise<void> {
@@ -230,12 +243,12 @@ async function main(): Promise<void> {
     ...stackDefaults(args.language),
   });
 
-  const settingsContent = claudeSettings(args.target, MCP_BIN, args.name);
+  const mcpJsonPath = join(args.target, ".mcp.json");
+  const mcpJsonContent = await mergeMcpJson(mcpJsonPath, args.target, MCP_BIN, args.name);
 
   const writes: Array<[string, string]> = [];
   if (!args.skipCi) writes.push([join(args.target, ".github/workflows/ci.yml"), workflow]);
   writes.push([join(args.target, ".agent-standards.yml"), standardsContent]);
-  writes.push([join(args.target, ".claude/settings.json"), settingsContent]);
 
   console.log(`\nScaffolding ${args.name} (${args.kind}/${args.language}) into ${args.target}\n`);
 
@@ -243,6 +256,12 @@ async function main(): Promise<void> {
     const status = await writeIfAbsent(path, content, args.force);
     console.log(`  ${status === "written" ? "✓ wrote   " : "→ skipped "} ${path}`);
   }
+
+  // .mcp.json is always merged (never skipped) so adding agent-standards
+  // to a project with existing MCP entries works idempotently.
+  await mkdir(dirname(mcpJsonPath), { recursive: true });
+  await writeFile(mcpJsonPath, mcpJsonContent, "utf8");
+  console.log(`  ✓ merged   ${mcpJsonPath}`);
 
   if (args.ensureBranches) {
     const result = await ensureDevBranch(args.target);
@@ -254,7 +273,7 @@ async function main(): Promise<void> {
 
   console.log("\nNext steps:");
   console.log("  1. Review and edit .agent-standards.yml — replace placeholder rules with real ones");
-  console.log("  2. Commit: git add .github/workflows/ci.yml .agent-standards.yml .claude/settings.json");
+  console.log("  2. Commit: git add .github/workflows/ci.yml .agent-standards.yml .mcp.json");
   console.log("  3. Set branch protection (run from forgedtech repo): see agent-standards/README.md");
   console.log(`  4. Restart Claude Code in ${args.target} to pick up the MCP server\n`);
 }
