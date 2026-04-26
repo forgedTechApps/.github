@@ -71,6 +71,11 @@
           "type": "array",
           "description": "Path globs that require an accompanying regression test on change.",
           "items": { "type": "string" }
+        },
+        "notes": {
+          "type": "array",
+          "description": "Free-form notes about the project's testing situation — baselines, known-broken suites, etc.",
+          "items": { "type": "string" }
         }
       }
     },
