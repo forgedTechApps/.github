@@ -55,6 +55,27 @@ The agent must show the proposal, get approval, then commit. Pick `kind`:
 | mobile   | quality-gate (Swift/Flutter), no deploy (App Store)    | forge-ios, eleven11           |
 | web      | quality-gate-node + Railway deploy                     | NetworkPulse web, marketing sites |
 
+## Org defaults (`extends:`)
+
+Every project's `.agent-standards.yml` should declare:
+
+```yaml
+extends: forgedtech/org-defaults
+```
+
+This pulls in the org-wide defaults from
+`agent-standards/defaults/org-defaults.yml` — DRY/SOLID/KISS, OWASP Top 10
+awareness, secret-handling rules, security headers, vulnerability scan
+expectations, branching policy, component-driven design.
+
+**Merge semantics**:
+- Scalars: project value wins (e.g. `unit_min: 80` in the project beats `60` in org defaults).
+- Arrays: org values + project values, deduplicated, project order first.
+- Objects: deep-merged, leaf-by-leaf.
+
+The MCP server resolves `extends:` at load time. Unknown extends targets fail
+loudly — a typo doesn't silently drop the defaults.
+
 ## Schema
 
 `schema/agent-standards.schema.json` — JSON Schema for `.agent-standards.yml`.

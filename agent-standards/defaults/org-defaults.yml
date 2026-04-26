@@ -1,0 +1,108 @@
+# forgedTechApps org-wide defaults.
+# Extended by every project's .agent-standards.yml via `extends: forgedtech/org-defaults`.
+#
+# Merge semantics (project file wins):
+#   - Scalars: project value overrides org value (e.g. project unit_min: 70 beats org 60)
+#   - Arrays: org values + project values, deduplicated, project order first
+#   - Objects: deep-merged
+#
+# This file is loaded by the MCP server when a project declares `extends:`.
+# Do NOT validate this file on its own — `repo` and `language` are intentionally absent.
+
+style:
+  # ── Software design (universal) ────────────────────────────────────────
+  - "DRY: extract repeated logic into shared modules (packages/shared, common utilities). Three uses = extract."
+  - "SOLID: single responsibility per class/module. Dependency inversion at module boundaries (depend on protocols/interfaces, not concrete types)."
+  - "KISS / YAGNI: build for current requirements. No speculative abstraction. Three similar lines beats a premature factory."
+  - "No commented-out code in committed changes. Delete it — git history is the archive."
+  - "No TODOs without a linked tracking issue (e.g. `// TODO(#123): ...`). Untracked TODOs decay into noise."
+  - "Conventional Commits: feat:, fix:, chore:, test:, docs:, ci:, refactor:, perf:, style:."
+  - "Names communicate intent. Single-letter variables only in tight loops or well-known math (i, j, x, y)."
+  - "Functions do one thing. If a function name uses 'and', split it."
+
+  # ── UI / component-driven design (applies to any UI surface) ────────────
+  - "Component-driven design: views composed from small, single-purpose, reusable components. A view file > 200 lines is a smell — extract subviews."
+  - "Components own their styling and behaviour, never reach into a parent or sibling. Communicate via props/inputs and events/callbacks."
+  - "Design tokens (colors, spacing, typography, radii) come from a single source — never hardcode hex values, magic spacing numbers, or font sizes inside a component."
+  - "A shared component library (e.g. packages/ui, design-system, or per-project equivalent) is the home for cross-feature primitives. Feature folders consume from it; they never re-implement a Button, Card, Modal, etc."
+  - "Storybook / catalog page / preview app for the component library when feasible — components are easier to reuse when they're discoverable."
+
+architecture:
+  rules:
+    # ── Boundaries & inputs ────────────────────────────────────────────────
+    - "Input validation at every system boundary: HTTP, queue, file I/O, IPC. Validate once at the boundary; trust internally."
+    - "Authorisation at the resource level, not just the route. Every read/write checks the requesting principal can act on THIS object."
+    - "External HTTP calls must set explicit timeouts and have a documented failure mode (retry, circuit-break, fallback). No bare unbounded fetch()."
+    - "Logging never includes PII, credentials, tokens, or full request bodies. Mask or omit at the logger, not the call site."
+
+    # ── Secrets & config ───────────────────────────────────────────────────
+    - "Secrets via environment variables or a secret store ONLY. Never in committed files (.env, source, config). Pre-commit / CI scans must reject."
+    - "All deployable services declare a complete .env.example documenting every required variable — no surprise config in production."
+    - "Service-role keys / admin tokens never flow to clients. Server-only."
+
+    # ── Data integrity ─────────────────────────────────────────────────────
+    - "SQL: parameterised queries only. String concatenation in queries is rejected at review."
+    - "Schema migrations are forward-only and reversible (or document why not). Destructive migrations (DROP, NOT NULL on existing) require explicit user approval."
+    - "Database access goes through a repository / data-access layer — UI / route handlers never touch the DB driver directly."
+
+    # ── HTTP services ──────────────────────────────────────────────────────
+    - "HTTP services set security headers: Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options: nosniff, X-Frame-Options: DENY (or frame-ancestors), Referrer-Policy: strict-origin-when-cross-origin."
+    - "CORS allowlist is explicit per-origin. No `*` for endpoints that handle credentials."
+    - "Rate-limit every public endpoint. Document the limit; surface 429 with Retry-After."
+
+    # ── OWASP Top 10 awareness ─────────────────────────────────────────────
+    - "Auth changes are reviewed against OWASP ASVS Level 1 minimum (https://owasp.org/www-project-application-security-verification-standard/)."
+    - "Any change touching auth, input handling, data access, or templating triggers an OWASP Top 10 mental review: A01 broken access control, A02 cryptographic failures, A03 injection, A04 insecure design, A05 security misconfiguration, A06 vulnerable components, A07 authn failures, A08 software/data integrity, A09 logging/monitoring failures, A10 SSRF."
+
+  sensitive_paths:
+    - "**/.env*"
+    - "**/secrets/**"
+    - "**/Dockerfile"
+    - "**/docker-compose*.yml"
+    - "**/wrangler.toml"
+    - "**/migrations/**"
+
+test_coverage:
+  # Project files override these — these are floors, not ceilings.
+  unit_min: 60
+  integration_min: 40
+  regression_required_for:
+    - "**/auth/**"
+    - "**/migrations/**"
+
+review:
+  explicit_approval_required_for:
+    - "**/.env*"
+    - "**/migrations/**"
+    - "**/Dockerfile"
+    - "**/wrangler.toml"
+    - ".github/workflows/**"
+  no_force_push_branches:
+    - main
+    - dev
+
+investigation:
+  # Soft by default — projects bump to hard for sensitive codebases.
+  mode: soft
+  min_read_write_ratio: 3
+
+branching:
+  required_branches: [main, dev]
+  default_branch: main
+  feature_branch_pattern: "^(feat|fix|chore|docs|test|ci|refactor|perf|style)/[a-z0-9._-]+$"
+  mode: soft
+
+# ── Vulnerability scanning (org policy) ────────────────────────────────────
+# This is enforced by the canonical .github/workflows/security-scan.yml +
+# the dependency-audit step inside every quality-gate-*.yml. Documented here
+# so agents see the policy when they read get_standards.
+#
+# Required scans, all run automatically on every PR via reusable workflows:
+#   1. CodeQL SAST (security-extended + security-and-quality queries)
+#   2. OWASP Dependency-Check (CVSS >= 7 fails the build)
+#   3. OSV Scanner against language lockfiles (Swift Package.resolved, etc.)
+#   4. (Optional, opt-in via security-scan.yml `enable-zap: true`) OWASP ZAP
+#      baseline scan against deployed HTTP services
+#
+# If a scan must be suppressed, add an inline justification comment AND open
+# a tracking issue. Never silently bypass.

@@ -1,4 +1,5 @@
 version: 1
+extends: forgedtech/org-defaults
 repo: ${REPO}
 language: ${LANGUAGE}
 
@@ -11,17 +12,29 @@ stack:
 
 style:
   - Replace with project-specific style rules.
-  - TypeScript: no `any` — use `unknown` and narrow.
-  - React: prefer Server Components in Next.js when no client interactivity needed.
+  - "TypeScript: no `any` — use `unknown` and narrow."
+  - "React: prefer Server Components in Next.js when no client interactivity needed."
+  # Component-driven design (also in org defaults — restated to keep web focused on it)
+  - "Atomic design ladder: atoms → molecules → organisms → templates → pages. Place each new component at the lowest level that fits."
+  - "Components are composable, not configurable: prefer 5 small props that compose, over 1 prop with 12 variants."
+  - "Stories before screens: each component has a Storybook (or equivalent) entry exercising every variant before being consumed by a screen."
 
 architecture:
   rules:
     - Replace with architectural constraints.
+    # ── Micro-frontend architecture ──────────────────────────────────────
+    - "Split the app into vertically-owned features (auth, billing, dashboard, etc.). Each feature owns its routes, state, components, and tests."
+    - "Cross-feature communication goes through a shared contract layer (typed events, URL routes, a shared API client) — features never import each other directly."
+    - "A shared `@org/ui` package holds the design system (atoms / molecules / templates). Features compose from it; they never re-implement primitives."
+    - "Build boundaries are explicit: each feature can be code-split (route-level chunk in Next.js, dynamic import elsewhere) so it loads independently."
+    - "Module federation / runtime composition is opt-in per-feature. Static composition (npm workspace) is the default; only escalate to runtime when independent deploys are required."
+    - "Shared dependencies (React, the design system) are deduped at build time. Version mismatches between features cause runtime breakage — pin via the workspace root."
   feature_path_pattern: "src/features/<Name>/"
   sensitive_paths:
     - "src/auth/**"
     - "next.config.*"
     - ".github/workflows/**"
+    - "packages/ui/**"
 
 test_coverage:
   unit_min: ${UNIT_COVERAGE}

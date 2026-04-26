@@ -12,6 +12,13 @@
       "const": 1,
       "description": "Schema version. Bump when making breaking schema changes."
     },
+    "extends": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Default(s) to inherit from. Currently supports built-in: 'forgedtech/org-defaults'. Project values win on scalars; arrays concatenate and dedupe."
+    },
     "repo": {
       "type": "string",
       "description": "Repo name in 'org/repo' form. Used by the MCP to confirm correct file."
