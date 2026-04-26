@@ -128,6 +128,34 @@ When bootstrapping a new repo, pass `--ensure-branches` to `init-project`
 to have the scaffolder create the `dev` branch (and push it if a remote
 is configured).
 
+## GitHub Actions free-tier constraints
+
+forgedTechApps is on the GitHub free plan. Private repos get **2,000 Linux
+minutes/month and 200 macOS minutes/month** — and macOS minutes burn at 10×
+the rate (a 10-minute mobile build is effectively 100 minutes of Linux quota
+worth of CI bandwidth). This shapes what every CI workflow must do:
+
+- **`paths-ignore` is mandatory** for `docs/**`, `**/*.md`, `LICENSE`,
+  `.gitignore` — documentation commits should never trigger a build.
+  All `init_repo` templates include this by default.
+- **Coverage thresholds anchored to current baseline**, not aspirational
+  targets. Use `test_coverage.notes:` to document why a threshold sits
+  where it does.
+- **`actions: read` and `issues: write` cannot appear in job-level
+  `permissions:` blocks** in reusable workflows on the free tier — both
+  cause `startup_failure`. The org's reusable workflows have been audited
+  to avoid these.
+- **`workflow_call` boolean inputs** cannot use `${{ }}` expressions in
+  the caller's `with:` block — use literal `true`/`false`.
+- **Dynamic `runs-on: ${{ }}` expressions** are unsupported — split into
+  separate jobs with static runner labels and `if:` conditions.
+
+If your repo legitimately can't use one of the canonical
+`quality-gate-*.yml` workflows (custom domain checks, framework-specific
+gates), set `ci.bespoke: true` with a `ci.bespoke_reason` in
+`.agent-standards.yml`. This silences `CI_NO_CANONICAL_QUALITY_GATE` and
+documents the trade-off explicitly.
+
 ## How an agent uses this
 
 1. Agent starts a task in repo `<R>`.

@@ -31,6 +31,24 @@ const PERMISSIONS_BLOCK = `permissions:
 const SCHEDULE_BLOCK = `  schedule:
     - cron: '0 2 * * 0'   # Sunday 02:00 UTC weekly security scan`;
 
+// Shared `on:` preamble. paths-ignore prevents docs-only commits from burning
+// GitHub Actions free-tier minutes (2000 Linux / 200 macOS per month for private repos).
+const ON_PREAMBLE = `on:
+  push:
+    branches: [main, dev]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+      - '.gitignore'
+  pull_request:
+    branches: [main, dev]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+      - '.gitignore'`;
+
 function qualityGate(language: Language): string {
   if (language === "mixed") return "quality-gate-node.yml"; // monorepo callers usually fan out
   return `quality-gate-${language}.yml`;
@@ -55,13 +73,9 @@ function securityScanLanguage(language: Language): string {
 function libraryWorkflow(opts: InitOptions): string {
   return `name: CI
 
-on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
+${ON_PREAMBLE}
 
-${SCHEDULE_BLOCK.replace("  schedule:", "  schedule:")}
+${SCHEDULE_BLOCK}
 
 concurrency:
   group: ci-\${{ github.ref }}
@@ -94,11 +108,7 @@ function mobileWorkflow(opts: InitOptions): string {
     const scheme = opts.swiftScheme ?? "<SCHEME>";
     return `name: CI
 
-on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
+${ON_PREAMBLE}
 
 ${SCHEDULE_BLOCK}
 
@@ -135,11 +145,7 @@ jobs:
   if (opts.language === "flutter") {
     return `name: CI
 
-on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
+${ON_PREAMBLE}
 
 ${SCHEDULE_BLOCK}
 
@@ -181,11 +187,7 @@ function serviceWorkflow(opts: InitOptions): string {
 
   return `name: CI
 
-on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
+${ON_PREAMBLE}
 
 ${SCHEDULE_BLOCK}
 
@@ -242,11 +244,7 @@ function webWorkflow(opts: InitOptions): string {
 
   return `name: CI
 
-on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
+${ON_PREAMBLE}
 
 ${SCHEDULE_BLOCK}
 

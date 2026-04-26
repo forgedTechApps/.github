@@ -168,6 +168,15 @@
           "type": "string",
           "enum": ["railway", "vercel", "app-store", "play-store", "none"],
           "default": "none"
+        },
+        "bespoke": {
+          "type": "boolean",
+          "default": false,
+          "description": "Set true when this repo intentionally uses a custom CI workflow instead of a canonical quality-gate-*.yml. Suppresses the CI_NO_CANONICAL_QUALITY_GATE finding. Use sparingly — bespoke CI drifts from org standards."
+        },
+        "bespoke_reason": {
+          "type": "string",
+          "description": "Required if bespoke: true. Document WHY this repo can't use the canonical workflow."
         }
       }
     }

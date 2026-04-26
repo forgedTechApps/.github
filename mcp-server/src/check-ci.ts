@@ -77,13 +77,29 @@ export async function checkCiSetup(
   );
 
   if (qgJobs.length === 0) {
-    findings.push({
-      severity: "error",
-      code: "CI_NO_CANONICAL_QUALITY_GATE",
-      message:
-        `${workflowPath} does not call any canonical quality-gate-*.yml from ${CANONICAL_OWNER_REPO}.`,
-      fix: "Replace bespoke CI with a quality-gate-<stack>.yml@v1 call. See product-ci-examples/.",
-    });
+    if (standards.ci?.bespoke) {
+      findings.push({
+        severity: "info",
+        code: "CI_BESPOKE_OPT_IN",
+        message:
+          `${workflowPath} is bespoke (opt-in via ci.bespoke). Reason: ${standards.ci.bespoke_reason ?? "(no reason given)"}`,
+      });
+      if (!standards.ci.bespoke_reason) {
+        findings.push({
+          severity: "warn",
+          code: "CI_BESPOKE_MISSING_REASON",
+          message: "ci.bespoke is true but ci.bespoke_reason is not set. Document WHY this repo can't use a canonical quality-gate-*.yml.",
+        });
+      }
+    } else {
+      findings.push({
+        severity: "error",
+        code: "CI_NO_CANONICAL_QUALITY_GATE",
+        message:
+          `${workflowPath} does not call any canonical quality-gate-*.yml from ${CANONICAL_OWNER_REPO}.`,
+        fix: "Replace bespoke CI with a quality-gate-<stack>.yml@v1 call, OR set ci.bespoke: true with a ci.bespoke_reason in .agent-standards.yml if the bespoke CI is intentional.",
+      });
+    }
   }
 
   // Coverage threshold check — values must meet what standards declare.

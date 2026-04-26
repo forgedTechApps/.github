@@ -38,6 +38,8 @@ export interface AgentStandards {
   ci?: {
     kind: "service" | "library" | "mobile" | "web";
     deploy_target?: "railway" | "vercel" | "app-store" | "play-store" | "none";
+    bespoke?: boolean;
+    bespoke_reason?: string;
   };
   branching?: {
     required_branches?: string[];
