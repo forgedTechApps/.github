@@ -130,6 +130,21 @@
       "items": { "type": "string" }
     },
 
+    "design_references": {
+      "type": "array",
+      "description": "Specific apps / sites whose UI the agent should imitate concrete values from (padding, radii, spacing, type ramp). Used by UI surfaces (mobile / web). Each entry pairs a source with WHAT specifically to mimic — vague references are useless.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "what"],
+        "properties": {
+          "source": { "type": "string", "description": "App or site name (e.g. 'Linear', 'Things 3', 'Stripe Dashboard')." },
+          "url": { "type": "string", "description": "URL or local path to screenshots / Figma file." },
+          "what": { "type": "string", "description": "What specifically to imitate — exact numbers if known. e.g. 'Spacing rhythm: 12px card padding, 4px row gap, 24px section breaks'." }
+        }
+      }
+    },
+
     "branching": {
       "type": "object",
       "description": "Branching strategy. check_branching validates the repo against this.",

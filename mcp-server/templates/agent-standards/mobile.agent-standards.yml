@@ -13,6 +13,20 @@ stack:
 style:
   - Replace with project-specific style rules.
 
+  # ── Human-feeling UI (avoid the AI-generated look) ─────────────────────
+  # The single biggest tell of AI-generated UI is filling every pixel and
+  # treating spacing/symmetry as the goal. Restraint and intentional
+  # hierarchy are the differentiators. See voice.md and design_references
+  # for concrete numbers to imitate.
+  - "Default to empty. Every pixel of UI must justify itself. AI wants to fill the screen — restraint is the differentiator. Sparse-and-decisive beats full-and-busy every time."
+  - "Steal specific values, not vibes. From an app whose UI you admire, extract exact numbers — padding, font size, line height, radius — from a screenshot. Apply those numbers literally. 'Inspired by X' produces generic output; 'matches X's 12px card padding and 4px row gap' produces specific output."
+  - "Mix sources. Take spacing rhythm from one app, button hierarchy from another, copy voice from a third. Cloning one app's whole design system trades AI-generic for app-clone — different problem, same lack of identity."
+  - "Hard caps until earned: 2 fonts, 3 colors. A third font or fourth color must be argued for in writing — what semantic role does it play that the existing set can't?"
+  - "Spacing carries meaning. Tight grouping = these belong together. Generous space = this matters. Uniform 16/24px gutters everywhere is the AI default — vary spacing on purpose."
+  - "Custom icons over defaults. Even swapping the system icon set (SF Symbols, Material) for a curated set like Phosphor or Lucide visibly de-AIs a UI. Where icons appear, they must add information, not decorate — fewer of them, more deliberate."
+  - "Hierarchy via emphasis, not symmetry. Three equal cards = template. One prominent card + two quiet ones = hierarchy. The loud thing on the screen is loud because everything else is quiet."
+  - "Microcopy is specific and in voice. Read voice.md before writing any user-facing string. 'Manage your tasks efficiently' is what AI writes; 'Add a task. We'll nag you later.' is what a person writes. Concrete verbs, no marketing."
+
 architecture:
   rules:
     - Networking through a single client — no ad-hoc HTTP from views.

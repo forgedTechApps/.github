@@ -38,6 +38,11 @@ export interface AgentStandards {
     min_read_write_ratio?: number;
   };
   context_pointers?: string[];
+  design_references?: Array<{
+    source: string;
+    url?: string;
+    what: string;
+  }>;
   ci?: {
     kind: "service" | "library" | "mobile" | "web";
     deploy_target?: "railway" | "vercel" | "app-store" | "play-store" | "none";
