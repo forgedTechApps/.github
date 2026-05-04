@@ -9,6 +9,17 @@
 # This file is loaded by the MCP server when a project declares `extends:`.
 # Do NOT validate this file on its own — `repo` and `language` are intentionally absent.
 
+# ── Model routing (logical names; CLAUDE.md maps to concrete IDs) ────
+# Two-phase workflow: heavy reasoning on Opus for plans, fast iteration
+# on Sonnet for execution. Projects can override (security-critical
+# repos may want execution: opus too).
+models:
+  planning:
+    model: opus
+    effort: medium
+  execution:
+    model: sonnet
+
 style:
   # ── Software design (universal) ────────────────────────────────────────
   - "DRY: extract repeated logic into shared modules (packages/shared, common utilities). Three uses = extract."

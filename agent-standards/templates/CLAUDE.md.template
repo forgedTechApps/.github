@@ -14,6 +14,64 @@ reference) and edit project-specific bits.
 
 ---
 
+## Model routing — two-phase workflow
+
+This system uses two models on purpose:
+
+- **Planning** → **Opus** (medium effort). Heavy reasoning, hypothesis-first,
+  design + architecture decisions, edge cases, scoping. The conversation you're
+  reading should be in Opus.
+- **Execution** → **Sonnet**. Writing the planned code, fix loops, mechanical
+  refactors, test loops.
+
+### Concrete IDs (update when models advance)
+
+| Logical | Concrete (today) | Effort |
+| --- | --- | --- |
+| `opus`   | `claude-opus-4-7`   | medium |
+| `sonnet` | `claude-sonnet-4-6` | (default) |
+| `haiku`  | `claude-haiku-4-5-20251001` | (default) |
+
+### How to use it in a session
+
+1. **Run the parent session in Opus** (medium effort). Use Claude Code's
+   `/model` to set this if it isn't already.
+2. **Call `start_task` with `phase='planning'` and `current_model='claude-opus-4-7'`**
+   when you begin. The MCP confirms phase/model alignment and returns a task_id.
+3. **When the plan is approved**, dispatch implementation to a Sonnet subagent:
+   ```
+   Agent({
+     model: "claude-sonnet-4-6",
+     description: "Implement plan from task <id>",
+     prompt: "<task description + plan>",
+   })
+   ```
+4. **Inside the subagent**, call `start_task` again with `phase='execution'`
+   and `current_model='claude-sonnet-4-6'`. Subsequent `propose_change` /
+   `commit_checkpoint` calls happen there.
+
+### What the MCP enforces
+
+- `start_task` **blocks** if the declared `current_model` doesn't match the
+  phase's expected family (planning expects Opus; execution expects Sonnet).
+- `propose_change` **blocks** if the active task is in `planning` phase but
+  paths are being proposed (plans don't write code), or if the declared model
+  isn't the execution family.
+- The block is **agent-declared**: the MCP can't independently detect which
+  model is calling it, so honesty is required. Omit `current_model` to skip
+  the check (advisory only).
+
+### Per-project overrides
+
+A repo can override in its `.agent-standards.yml`:
+
+```yaml
+models:
+  execution:
+    model: opus      # security-critical repo: never let Sonnet write
+    effort: high
+```
+
 ## Plan before code
 
 For any non-trivial change:

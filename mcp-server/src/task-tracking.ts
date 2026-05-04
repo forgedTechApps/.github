@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { minimatch } from "minimatch";
 import type { Finding } from "./check-ci.js";
-import type { AgentStandards } from "./standards.js";
+import { classifyModel, type AgentStandards, type Phase } from "./standards.js";
 
 /**
  * Hypothesis-first task tracking. Persisted in <repo_root>/.agent-standards-tasks.json
@@ -30,6 +30,8 @@ export interface TaskRecord {
   closed_at?: string;
   description: string;
   hypothesis: string;
+  phase: Phase;
+  declared_model?: string;
   expected_reads: string[];
   expected_writes: string[];
   actual_reads: string[];
@@ -71,22 +73,60 @@ async function save(repoRoot: string, data: TasksFile): Promise<void> {
 export interface StartTaskArgs {
   description: string;
   hypothesis: string;
+  phase?: Phase;
+  current_model?: string; // agent-declared, e.g. "claude-opus-4-7"
   expected_reads?: string[];
   expected_writes?: string[];
 }
 
 export interface StartTaskResult {
   task_id: string;
+  phase: Phase;
+  recommended_model?: { model: string; effort?: string };
+  blocked: boolean;
   message: string;
 }
 
-export async function startTask(repoRoot: string, args: StartTaskArgs): Promise<StartTaskResult> {
+export async function startTask(
+  repoRoot: string,
+  args: StartTaskArgs,
+  standards: AgentStandards,
+): Promise<StartTaskResult> {
+  const phase: Phase = args.phase ?? "planning";
+  const expected = standards.models?.[phase];
+  const declared = classifyModel(args.current_model);
+
+  // Block if the agent declared a model that doesn't match the phase's expected family.
+  // Default policy: block. Agent can override by dispatching a subagent on the right model.
+  let blocked = false;
+  let blockMessage: string | undefined;
+  if (expected && declared && declared !== expected.model) {
+    blocked = true;
+    blockMessage =
+      `Phase '${phase}' expects model family '${expected.model}'${expected.effort ? ` (effort: ${expected.effort})` : ""}, ` +
+      `but current_model='${args.current_model}' resolves to '${declared}'. ` +
+      `Dispatch a subagent: Agent({ model: "claude-${expected.model}-...", description: "...", prompt: "..." }). ` +
+      `If you intend to bypass, omit current_model — the MCP can't enforce what isn't declared.`;
+  }
+
+  if (blocked) {
+    return {
+      task_id: "",
+      phase,
+      recommended_model: expected ? { model: expected.model, effort: expected.effort } : undefined,
+      blocked: true,
+      message: blockMessage!,
+    };
+  }
+
   const data = await load(repoRoot);
   const task: TaskRecord = {
     id: randomUUID().slice(0, 8),
     created_at: new Date().toISOString(),
     description: args.description,
     hypothesis: args.hypothesis,
+    phase,
+    declared_model: args.current_model,
     expected_reads: args.expected_reads ?? [],
     expected_writes: args.expected_writes ?? [],
     actual_reads: [],
@@ -96,9 +136,21 @@ export async function startTask(repoRoot: string, args: StartTaskArgs): Promise<
   data.tasks.push(task);
   data.active_task_id = task.id;
   await save(repoRoot, data);
+
+  const tips: string[] = [];
+  if (!declared) {
+    tips.push("Tip: pass current_model so the MCP can verify model/phase alignment. Without it, alignment is advisory only.");
+  }
+  if (expected) {
+    tips.push(`Phase '${phase}' uses model='${expected.model}'${expected.effort ? ` effort='${expected.effort}'` : ""}.`);
+  }
+
   return {
     task_id: task.id,
-    message: `Task ${task.id} started. Hypothesis recorded; expected reads=${task.expected_reads.length}, expected writes=${task.expected_writes.length}.`,
+    phase,
+    recommended_model: expected ? { model: expected.model, effort: expected.effort } : undefined,
+    blocked: false,
+    message: `Task ${task.id} started (phase=${phase}). ${tips.join(" ")}`,
   };
 }
 
@@ -108,6 +160,7 @@ export interface ProposeChangeArgs {
   task_id?: string; // defaults to active task
   paths: string[];
   rationale: string;
+  current_model?: string; // agent-declared, for execution-phase model check
 }
 
 export async function proposeChange(
@@ -138,6 +191,32 @@ export async function proposeChange(
   }
 
   const mode = standards.investigation?.mode ?? "soft";
+
+  // Model/phase check: writes happen in the execution phase. If the task is
+  // in 'planning' phase but the agent is now writing, that's a phase mismatch
+  // — the agent should have transitioned (via start_task with phase=execution
+  // on a Sonnet subagent).
+  const declared = classifyModel(args.current_model);
+  const expected = standards.models?.execution;
+  if (declared && expected && declared !== expected.model) {
+    findings.push({
+      severity: "error",
+      code: "TASK_WRONG_MODEL_FOR_EXECUTION",
+      message:
+        `Writes (execution phase) expect model family '${expected.model}', ` +
+        `but current_model='${args.current_model}' resolves to '${declared}'. ` +
+        `Dispatch a subagent: Agent({ model: "claude-${expected.model}-...", ... }).`,
+      fix: "Stop writing from the planning model. Hand off to an execution subagent.",
+    });
+  }
+  if (task.phase === "planning" && (args.paths?.length ?? 0) > 0) {
+    findings.push({
+      severity: mode === "hard" ? "error" : "warn",
+      code: "TASK_PLANNING_PHASE_WRITE",
+      message: `Task ${id} is in 'planning' phase but propose_change is being called with ${args.paths.length} path(s). Plans don't write code — start a new task with phase='execution' on the execution model.`,
+      fix: "If the plan is approved and ready to execute, call start_task again with phase='execution' and current_model from the execution subagent.",
+    });
+  }
 
   // For each proposed path, check if it's within expected_writes (glob match).
   for (const path of args.paths) {

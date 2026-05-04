@@ -104,6 +104,8 @@ export function createServer(options: CreateServerOptions = {}): Server {
     repo_root: RepoRoot,
     description: z.string().min(5),
     hypothesis: z.string().min(5),
+    phase: z.enum(["planning", "execution"]).optional(),
+    current_model: z.string().optional(),
     expected_reads: z.array(z.string()).optional(),
     expected_writes: z.array(z.string()).optional(),
   });
@@ -113,6 +115,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
     task_id: z.string().optional(),
     paths: z.array(z.string()),
     rationale: z.string().min(5),
+    current_model: z.string().optional(),
   });
 
   const CommitCheckpointArgsZ = z.object({
@@ -286,9 +289,13 @@ export function createServer(options: CreateServerOptions = {}): Server {
       {
         name: "start_task",
         description:
-          "Record a hypothesis-first plan before doing work. Captures: description, hypothesis " +
-          "about what needs changing, expected files to read/write. Returns a task_id used by " +
-          "propose_change and commit_checkpoint. Persisted in .agent-standards-tasks.json.",
+          "Record a hypothesis-first plan before doing work. Captures description, hypothesis, " +
+          "expected reads/writes, and phase (planning|execution). Returns a task_id and the " +
+          "recommended model for the phase. " +
+          "BLOCKS if current_model is declared and doesn't match the phase's expected family — " +
+          "i.e. starting a 'planning' task while running on Sonnet returns a block + dispatch " +
+          "instruction. The MCP can't independently detect which model called it, so the check " +
+          "depends on the agent honestly passing current_model.",
         inputSchema: {
           type: "object",
           required: defaultRepoRoot ? ["description", "hypothesis"] : ["repo_root", "description", "hypothesis"],
@@ -296,6 +303,16 @@ export function createServer(options: CreateServerOptions = {}): Server {
             repo_root: repoRootProp,
             description: { type: "string" },
             hypothesis: { type: "string" },
+            phase: {
+              type: "string",
+              enum: ["planning", "execution"],
+              default: "planning",
+              description: "planning = design/hypothesis; execution = writing the planned code.",
+            },
+            current_model: {
+              type: "string",
+              description: "The model currently running this session (e.g. 'claude-opus-4-7'). Required for the model/phase block to fire.",
+            },
             expected_reads: { type: "array", items: { type: "string" }, description: "File paths or globs you expect to read." },
             expected_writes: { type: "array", items: { type: "string" }, description: "File paths or globs you expect to modify." },
           },
@@ -305,8 +322,10 @@ export function createServer(options: CreateServerOptions = {}): Server {
         name: "propose_change",
         description:
           "Validate intended write paths against the active task's expected_writes. Hard mode " +
-          "(.agent-standards.yml investigation.mode=hard) blocks on out-of-scope writes; soft mode warns. " +
-          "Call before writing — surfaces scope creep early.",
+          "(investigation.mode=hard) blocks on out-of-scope writes; soft mode warns. Also checks " +
+          "model/phase: if current_model is declared and the task is in 'planning' phase or the " +
+          "model family doesn't match models.execution, blocks. Pass current_model to enable " +
+          "the check.",
         inputSchema: {
           type: "object",
           required: defaultRepoRoot ? ["paths", "rationale"] : ["repo_root", "paths", "rationale"],
@@ -315,6 +334,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
             task_id: { type: "string", description: "Defaults to the active task." },
             paths: { type: "array", items: { type: "string" } },
             rationale: { type: "string" },
+            current_model: { type: "string", description: "Current model id for the phase check." },
           },
         },
       },
@@ -466,8 +486,12 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
       if (req.params.name === "start_task") {
         const args = StartTaskArgsZ.parse(req.params.arguments ?? {});
-        const result = await startTask(args.repo_root, args);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        const standards = await loadStandards(args.repo_root);
+        const result = await startTask(args.repo_root, args, standards);
+        return {
+          isError: result.blocked,
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
       }
 
       if (req.params.name === "propose_change") {

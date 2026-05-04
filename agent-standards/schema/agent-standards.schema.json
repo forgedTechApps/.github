@@ -28,6 +28,22 @@
       "enum": ["swift", "flutter", "node", "python", "dotnet", "mixed"],
       "description": "Primary language. Selects which CI quality gate applies."
     },
+
+    "models": {
+      "type": "object",
+      "description": "Model routing per task phase. Logical names (planning / execution) so we don't hardcode model IDs that change. CLAUDE.md maps them to concrete IDs at the boundary. Project files override org defaults via normal merge.",
+      "additionalProperties": false,
+      "properties": {
+        "planning": {
+          "$ref": "#/$defs/modelSpec",
+          "description": "Used for design, hypothesis-first task definition, architecture decisions. Default: opus / medium effort."
+        },
+        "execution": {
+          "$ref": "#/$defs/modelSpec",
+          "description": "Used for writing the planned code, fix loops, mechanical refactors. Default: sonnet."
+        }
+      }
+    },
     "stack": {
       "type": "object",
       "description": "Concrete tooling. Helps the agent pick the right commands.",
@@ -244,6 +260,26 @@
         "bespoke_reason": {
           "type": "string",
           "description": "Required if bespoke: true. Document WHY this repo can't use the canonical workflow."
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "modelSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": ["opus", "sonnet", "haiku"],
+          "description": "Logical model family. Concrete IDs (claude-opus-4-7, claude-sonnet-4-6, etc.) live in CLAUDE.md so model upgrades don't require touching every project file."
+        },
+        "effort": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Reasoning effort. Higher = more thinking tokens, better quality on hard problems. Most useful on opus."
         }
       }
     }

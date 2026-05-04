@@ -64,6 +64,31 @@ export interface AgentStandards {
     feature_branch_pattern?: string;
     mode?: "soft" | "hard";
   };
+  models?: {
+    planning?: ModelSpec;
+    execution?: ModelSpec;
+  };
+}
+
+export interface ModelSpec {
+  model: "opus" | "sonnet" | "haiku";
+  effort?: "low" | "medium" | "high";
+}
+
+export type Phase = "planning" | "execution";
+
+/**
+ * Maps a declared current_model string (e.g. "claude-opus-4-7") to its
+ * logical family (opus / sonnet / haiku). Substring match — tolerant of
+ * version suffixes and aliases. Returns null if not recognised.
+ */
+export function classifyModel(name: string | undefined): "opus" | "sonnet" | "haiku" | null {
+  if (!name) return null;
+  const n = name.toLowerCase();
+  if (n.includes("opus")) return "opus";
+  if (n.includes("sonnet")) return "sonnet";
+  if (n.includes("haiku")) return "haiku";
+  return null;
 }
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
