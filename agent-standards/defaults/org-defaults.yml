@@ -20,6 +20,21 @@ style:
   - "Names communicate intent. Single-letter variables only in tight loops or well-known math (i, j, x, y)."
   - "Functions do one thing. If a function name uses 'and', split it."
 
+  # ── Workflow discipline (how to run a coding session) ──────────────────
+  - "Plan before coding. State hypothesis + intended file changes + test approach BEFORE writing code. Confirm with the user if the change is non-trivial."
+  - "Break tasks into 3–5 focused chunks. If a single task takes more than ~5 file changes or branches into >2 unrelated areas, split it."
+  - "Scope discipline: implement exactly what was requested. No 'while I'm here' refactors, no speculative additions. If you spot something else worth doing, mention it and stop."
+  - "Refactor only after it works. Make the feature pass tests first; restructure second. Refactoring mid-feature loses the thread and creates rework."
+  - "Tests are non-negotiable; the order depends on the spec. Known behaviour (services, invariants, bug fixes) → test-first. Unknown behaviour (new feature, novel UI) → build-then-test in a fix-loop. Either way, tests ship with the change."
+  - "After every two search/read operations, write findings somewhere durable (the plan, a TODO comment, a scratch note). Reading without recording loses context."
+  - "Be explicit about constraints in your own work: when picking a pattern, use the existing one in the codebase. When adding behaviour, change only the files needed. No new dependencies without justification."
+  - "If you (the agent) made a mistake the user had to correct, propose a one-line addition to CLAUDE.md or .agent-standards.yml that would have prevented it. The user accepts or declines — never auto-edit those files."
+
+  # ── Token / context discipline ─────────────────────────────────────────
+  - "Find before reading. Use Grep / search for symbols and keywords first. Don't Read whole files when a targeted range or rg search will answer the question."
+  - "Don't re-read files within a session unless you suspect they've changed. Scroll up — the prior result is still in context. Re-running the same Read is wasted context."
+  - "Long file or huge log? Read with offset/limit, or filter through grep / head / tail. The whole file in context costs more than the answer is worth."
+
   # ── UI / component-driven design (applies to any UI surface) ────────────
   - "Component-driven design: views composed from small, single-purpose, reusable components. A view file > 200 lines is a smell — extract subviews."
   - "Components own their styling and behaviour, never reach into a parent or sibling. Communicate via props/inputs and events/callbacks."

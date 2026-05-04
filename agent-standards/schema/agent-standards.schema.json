@@ -83,6 +83,40 @@
           "type": "array",
           "description": "Free-form notes about the project's testing situation — baselines, known-broken suites, etc.",
           "items": { "type": "string" }
+        },
+        "per_surface": {
+          "type": "object",
+          "description": "Per-glob coverage thresholds. Keys are path globs; values are thresholds (statements / branches / functions). Stricter than the top-level unit_min on the matched paths.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "statements": { "type": "integer", "minimum": 0, "maximum": 100 },
+              "branches":   { "type": "integer", "minimum": 0, "maximum": 100 },
+              "functions":  { "type": "integer", "minimum": 0, "maximum": 100 },
+              "lines":      { "type": "integer", "minimum": 0, "maximum": 100 }
+            }
+          }
+        },
+        "excluded": {
+          "type": "array",
+          "description": "Path globs excluded from coverage. Pair with excluded_rationale to document WHY.",
+          "items": { "type": "string" }
+        },
+        "excluded_rationale": {
+          "type": "array",
+          "description": "One-line justifications for entries in `excluded`. Inflating coverage by excluding hard-to-test code is a smell — always justify.",
+          "items": { "type": "string" }
+        },
+        "rules": {
+          "type": "array",
+          "description": "Project-specific testing rules (e.g. 'service tests are mandatory', 'pure helpers must have unit tests before merge').",
+          "items": { "type": "string" }
+        },
+        "exempt_from_test_requirement": {
+          "type": "array",
+          "description": "Path globs where new code does NOT require a test. Use sparingly — typically only generated files, third-party adapters, or storybook entries.",
+          "items": { "type": "string" }
         }
       }
     },

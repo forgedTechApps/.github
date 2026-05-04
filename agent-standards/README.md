@@ -55,6 +55,21 @@ The agent must show the proposal, get approval, then commit. Pick `kind`:
 | mobile   | quality-gate (Swift/Flutter), no deploy (App Store)    | forge-ios, eleven11           |
 | web      | quality-gate-node + Railway deploy                     | NetworkPulse web, marketing sites |
 
+## The three layers
+
+The system has three layers, each with a distinct mechanism:
+
+| Layer    | Where it lives                          | What it holds                                       | Mechanism                          |
+|----------|-----------------------------------------|-----------------------------------------------------|------------------------------------|
+| Policy   | `.agent-standards.yml` per repo         | Coding rules, architecture, sensitive paths, coverage, branching. **Checkable.** | Loaded by agent-standards MCP. `extends: forgetech/org-defaults` flows org defaults into every project. |
+| Workflow | `CLAUDE.md` per repo                    | How to run a session — plan, chunk size, test order, scope discipline, session hygiene. **Advisory.** | Read by Claude Code at session start. Template at `agent-standards/templates/CLAUDE.md.template`. |
+| Tooling  | `.mcp.json` + `.claude/` per repo       | Which MCP servers run, permissions, hooks, env vars. **Wiring.** | Read by Claude Code at session start. |
+
+Don't put workflow rules in `.agent-standards.yml` — the MCP can't enforce
+"start a fresh session", so they live in `CLAUDE.md` where they're advisory.
+Don't put policy in `CLAUDE.md` — it should be machine-checkable so it gets
+flagged in CI / pre-commit, not just hoped-at.
+
 ## Org defaults (`extends:`)
 
 Every project's `.agent-standards.yml` should declare:

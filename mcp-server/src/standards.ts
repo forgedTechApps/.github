@@ -28,6 +28,11 @@ export interface AgentStandards {
     integration_min?: number;
     regression_required_for?: string[];
     notes?: string[];
+    per_surface?: Record<string, { statements?: number; branches?: number; functions?: number; lines?: number }>;
+    excluded?: string[];
+    excluded_rationale?: string[];
+    rules?: string[];
+    exempt_from_test_requirement?: string[];
   };
   review?: {
     explicit_approval_required_for?: string[];

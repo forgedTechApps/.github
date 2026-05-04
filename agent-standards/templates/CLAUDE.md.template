@@ -1,0 +1,91 @@
+# How we work with Claude Code in forgedTechApps projects
+
+This is the **workflow** companion to `.agent-standards.yml` (which holds policy).
+Policy says *what good code looks like*; this file says *how to run a session
+that produces it*. Drop a copy into any project's `CLAUDE.md` (or include by
+reference) and edit project-specific bits.
+
+> **Layered system, in case it's not clear:**
+> - **Policy** lives in `.agent-standards.yml`, served by the agent-standards MCP.
+>   `extends: forgedtech/org-defaults` flows org-wide rules into every project.
+> - **Workflow** lives in this file (`CLAUDE.md`). Read at session start.
+> - **Tooling** lives in `.mcp.json` and `.claude/`. The MCP servers and IDE
+>   config that make policy + workflow enforceable.
+
+---
+
+## Plan before code
+
+For any non-trivial change:
+
+1. **State the hypothesis.** What do you think the problem/cause is? Cite the
+   files/lines that point that way.
+2. **Outline the change.** Which files will you touch, in what order? What's
+   the test approach?
+3. **Get approval.** Confirm with the user before writing code. Plan mode
+   (shift+tab in Claude Code) is the right surface.
+
+If the change is one or two lines, skip the ceremony — but still narrate the
+intent in one sentence before editing.
+
+## Break work into 3–5 chunks
+
+Tasks larger than ~5 file changes or that span >2 unrelated areas should be
+split. Long single tasks make the agent wander and lose intent. The smaller
+the chunk, the higher the hit rate.
+
+## Tests ship with the change
+
+Non-negotiable. The *order* depends on the spec:
+
+- **Spec is known** (service contract, invariant, bug fix) → write the test
+  first, watch it fail, make it pass.
+- **Spec is unknown** (new feature, novel UI, exploration) → build the thing,
+  run it, then write tests against the behaviour you found.
+
+Either way, no merge without tests for new logic.
+
+## Refactor only after it works
+
+Make the feature pass tests first. Restructure second. Refactoring
+mid-feature is the most reliable way to lose the thread — both for the agent
+and for the human reviewing it.
+
+## Be explicit about constraints
+
+In prompts, name the boundary:
+- "Use the existing pattern in `apps/web/lib/foo.ts` — match its shape."
+- "Touch only `services/foo.service.ts` and its test."
+- "No new dependencies."
+
+These three sentences alone prevent most over-engineering.
+
+## Session hygiene
+
+- **Start a fresh Claude Code session for each new task.** Old context drags
+  accuracy down and burns tokens. The session is cheap; the wrong context is
+  expensive.
+- **Don't paste the whole codebase.** Let the agent ask for the files it needs,
+  or specify the 3–4 most relevant up front.
+- **Use git as your checkpoint.** Commit working state often. When an edit
+  goes off-track, `git restore` or revert to the last good commit and start
+  fresh — don't try to patch a confused agent forward.
+- **If you notice the agent re-reading the same file or running redundant
+  searches, interrupt and redirect.** Don't pay tokens for it to remind itself.
+
+## When the agent makes a mistake
+
+If the user had to correct something the agent should have known:
+
+1. Agent proposes a one-line addition to this file (or `.agent-standards.yml`)
+   that would have prevented the mistake.
+2. User accepts or declines — never auto-edit.
+
+This keeps the standards files growing from real friction, not paranoia.
+
+## Project-specific section (fill in)
+
+Below this line is where project-specific content goes — architecture rules,
+naming conventions, folder structure, things the agent should never do, key
+file paths. Most projects already have this content; the section above is the
+universal companion.
