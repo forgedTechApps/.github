@@ -8,6 +8,15 @@ import { minimatch } from "minimatch";
 import { loadStandards, StandardsError } from "./standards.js";
 import { checkCiSetup } from "./check-ci.js";
 import { checkBranching } from "./check-branching.js";
+import { checkSecrets } from "./check-secrets.js";
+import { checkDesignConsistency } from "./check-design-consistency.js";
+import { proposeRule } from "./propose-rule.js";
+import { appendDrift, getDriftLog } from "./drift-log.js";
+import {
+  startTask,
+  proposeChange,
+  commitCheckpoint,
+} from "./task-tracking.js";
 import { generateCi, type CiKind, type Language } from "./init-repo.js";
 
 export interface CreateServerOptions {
@@ -64,6 +73,55 @@ export function createServer(options: CreateServerOptions = {}): Server {
     swift_scheme: z.string().optional(),
     working_directory: z.string().optional(),
     railway_service_name: z.string().optional(),
+  });
+
+  const CheckSecretsArgs = z.object({
+    repo_root: RepoRoot,
+    scope: z.enum(["staged", "tracked", "all"]).default("staged"),
+  });
+
+  const CheckDesignConsistencyArgs = z.object({ repo_root: RepoRoot });
+
+  const RunLocalChecksArgs = z.object({
+    repo_root: RepoRoot,
+    include: z.array(z.enum(["ci", "branching", "secrets", "design"])).optional(),
+    secrets_scope: z.enum(["staged", "tracked", "all"]).default("staged"),
+  });
+
+  const ProposeRuleArgs = z.object({
+    repo_root: RepoRoot,
+    target: z.enum(["claude_md", "agent_standards"]),
+    rule: z.string().min(5),
+    reason: z.string().min(5),
+  });
+
+  const GetDriftLogArgs = z.object({
+    repo_root: RepoRoot,
+    window_days: z.number().int().min(1).max(365).default(14),
+  });
+
+  const StartTaskArgsZ = z.object({
+    repo_root: RepoRoot,
+    description: z.string().min(5),
+    hypothesis: z.string().min(5),
+    expected_reads: z.array(z.string()).optional(),
+    expected_writes: z.array(z.string()).optional(),
+  });
+
+  const ProposeChangeArgsZ = z.object({
+    repo_root: RepoRoot,
+    task_id: z.string().optional(),
+    paths: z.array(z.string()),
+    rationale: z.string().min(5),
+  });
+
+  const CommitCheckpointArgsZ = z.object({
+    repo_root: RepoRoot,
+    task_id: z.string().optional(),
+    reads: z.array(z.string()).optional(),
+    writes: z.array(z.string()).optional(),
+    note: z.string().optional(),
+    close: z.boolean().optional(),
   });
 
   const repoRootProp = defaultRepoRoot
@@ -145,6 +203,140 @@ export function createServer(options: CreateServerOptions = {}): Server {
           },
         },
       },
+      {
+        name: "check_secrets",
+        description:
+          "Scan files for likely secrets (cloud keys, bearer tokens, JWTs, private keys). " +
+          "Default scope: staged files (pre-commit gate). Use 'tracked' for the full repo, 'all' for an unindexed walk. " +
+          "Conservative pattern set — for deep scanning, run gitleaks/trufflehog in CI.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: {
+            repo_root: repoRootProp,
+            scope: { type: "string", enum: ["staged", "tracked", "all"], default: "staged" },
+          },
+        },
+      },
+      {
+        name: "check_design_consistency",
+        description:
+          "Lint UI files for design-system drift: hardcoded hex colors not in tokens, off-scale spacing, " +
+          "more than 2 fonts or 3 colors (org-wide hard caps), inline styles in JSX. " +
+          "Only meaningful for ci.kind=web or mobile; no-ops elsewhere. " +
+          "Detects token files via convention (tokens|theme|design-system|colors|palette|spacing|typography).",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "run_local_checks",
+        description:
+          "One-call aggregator for the standard local checks: ci_setup, branching, secrets, design. " +
+          "Use this before committing — closes the gap of having to call each tool individually. " +
+          "Findings are appended to the drift log; query trends with get_drift_log.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: {
+            repo_root: repoRootProp,
+            include: {
+              type: "array",
+              items: { type: "string", enum: ["ci", "branching", "secrets", "design"] },
+              description: "Subset of checks to run. Default: all four.",
+            },
+            secrets_scope: { type: "string", enum: ["staged", "tracked", "all"], default: "staged" },
+          },
+        },
+      },
+      {
+        name: "propose_claude_md_rule",
+        description:
+          "Append a proposed addition to <repo_root>/.agent-standards-proposals.md. Use when the agent " +
+          "made a mistake the user had to correct, AND the agent has identified a one-line rule that " +
+          "would have prevented it. Never auto-edits CLAUDE.md / .agent-standards.yml — humans review.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? ["target", "rule", "reason"] : ["repo_root", "target", "rule", "reason"],
+          properties: {
+            repo_root: repoRootProp,
+            target: { type: "string", enum: ["claude_md", "agent_standards"] },
+            rule: { type: "string", description: "One-line rule that would have prevented the mistake." },
+            reason: { type: "string", description: "What went wrong and why this rule helps." },
+          },
+        },
+      },
+      {
+        name: "get_drift_log",
+        description:
+          "Summarise standards-check findings recorded in the last N days. Surfaces trends rather " +
+          "than one-shot results: which violations recur, which sources fire most. Reads from " +
+          "<repo_root>/.agent-standards-drift.jsonl (gitignored, populated by run_local_checks).",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: {
+            repo_root: repoRootProp,
+            window_days: { type: "number", default: 14 },
+          },
+        },
+      },
+      {
+        name: "start_task",
+        description:
+          "Record a hypothesis-first plan before doing work. Captures: description, hypothesis " +
+          "about what needs changing, expected files to read/write. Returns a task_id used by " +
+          "propose_change and commit_checkpoint. Persisted in .agent-standards-tasks.json.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? ["description", "hypothesis"] : ["repo_root", "description", "hypothesis"],
+          properties: {
+            repo_root: repoRootProp,
+            description: { type: "string" },
+            hypothesis: { type: "string" },
+            expected_reads: { type: "array", items: { type: "string" }, description: "File paths or globs you expect to read." },
+            expected_writes: { type: "array", items: { type: "string" }, description: "File paths or globs you expect to modify." },
+          },
+        },
+      },
+      {
+        name: "propose_change",
+        description:
+          "Validate intended write paths against the active task's expected_writes. Hard mode " +
+          "(.agent-standards.yml investigation.mode=hard) blocks on out-of-scope writes; soft mode warns. " +
+          "Call before writing — surfaces scope creep early.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? ["paths", "rationale"] : ["repo_root", "paths", "rationale"],
+          properties: {
+            repo_root: repoRootProp,
+            task_id: { type: "string", description: "Defaults to the active task." },
+            paths: { type: "array", items: { type: "string" } },
+            rationale: { type: "string" },
+          },
+        },
+      },
+      {
+        name: "commit_checkpoint",
+        description:
+          "Record progress on the active (or specified) task: files actually read/written, optional " +
+          "note, and an optional close flag. Returns running totals + read/write ratio. Pair with " +
+          "start_task / propose_change to build a hypothesis-first audit trail.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: {
+            repo_root: repoRootProp,
+            task_id: { type: "string" },
+            reads: { type: "array", items: { type: "string" } },
+            writes: { type: "array", items: { type: "string" } },
+            note: { type: "string" },
+            close: { type: "boolean" },
+          },
+        },
+      },
     ],
   }));
 
@@ -211,6 +403,84 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
           return { path, triggered };
         });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
+      if (req.params.name === "check_secrets") {
+        const args = CheckSecretsArgs.parse(req.params.arguments ?? {});
+        const findings = await checkSecrets(args.repo_root, args.scope);
+        await appendDrift(args.repo_root, "check_secrets", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "check_design_consistency") {
+        const args = CheckDesignConsistencyArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkDesignConsistency(args.repo_root, standards);
+        await appendDrift(args.repo_root, "check_design_consistency", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "run_local_checks") {
+        const args = RunLocalChecksArgs.parse(req.params.arguments ?? {});
+        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design"]);
+        const standards = await loadStandards(args.repo_root);
+        const sections: Array<{ source: string; findings: import("./check-ci.js").Finding[] }> = [];
+        if (include.has("ci")) {
+          const f = await checkCiSetup(args.repo_root, standards);
+          sections.push({ source: "check_ci_setup", findings: f });
+          await appendDrift(args.repo_root, "check_ci_setup", f);
+        }
+        if (include.has("branching")) {
+          const f = await checkBranching(args.repo_root, standards);
+          sections.push({ source: "check_branching", findings: f });
+          await appendDrift(args.repo_root, "check_branching", f);
+        }
+        if (include.has("secrets")) {
+          const f = await checkSecrets(args.repo_root, args.secrets_scope);
+          sections.push({ source: "check_secrets", findings: f });
+          await appendDrift(args.repo_root, "check_secrets", f);
+        }
+        if (include.has("design")) {
+          const f = await checkDesignConsistency(args.repo_root, standards);
+          sections.push({ source: "check_design_consistency", findings: f });
+          await appendDrift(args.repo_root, "check_design_consistency", f);
+        }
+        const isError = sections.some((s) => s.findings.some((f) => f.severity === "error"));
+        return { isError, content: [{ type: "text", text: JSON.stringify(sections, null, 2) }] };
+      }
+
+      if (req.params.name === "propose_claude_md_rule") {
+        const args = ProposeRuleArgs.parse(req.params.arguments ?? {});
+        const result = await proposeRule(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
+      if (req.params.name === "get_drift_log") {
+        const args = GetDriftLogArgs.parse(req.params.arguments ?? {});
+        const summary = await getDriftLog(args.repo_root, args.window_days);
+        return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
+      }
+
+      if (req.params.name === "start_task") {
+        const args = StartTaskArgsZ.parse(req.params.arguments ?? {});
+        const result = await startTask(args.repo_root, args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
+      if (req.params.name === "propose_change") {
+        const args = ProposeChangeArgsZ.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await proposeChange(args.repo_root, args, standards);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "commit_checkpoint") {
+        const args = CommitCheckpointArgsZ.parse(req.params.arguments ?? {});
+        const result = await commitCheckpoint(args.repo_root, args);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 

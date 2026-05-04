@@ -1,3 +1,9 @@
 node_modules
 *.log
 .DS_Store
+
+# agent-standards MCP runtime artefacts (per-developer, local-only)
+.agent-standards-drift.jsonl
+.agent-standards-tasks.json
+# .agent-standards-proposals.md is intentionally NOT gitignored —
+# proposed-rules are meant to be reviewed and committed when accepted.

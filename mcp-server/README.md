@@ -117,14 +117,32 @@ pnpm lint         # tsc --noEmit
 
 ## Roadmap
 
-Currently shipped:
-- `get_standards` — load + validate
-- `check_paths` — gate detection
+Currently shipped (13 tools):
+
+**Standards & validation**
+- `get_standards` — load + validate, resolves `extends:`
+- `check_paths` — sensitive / approval / regression gate detection
 - `check_ci_setup` — workflow validation against standards
 - `check_branching` — required branches + feature-branch-name policy
+- `check_secrets` — likely-secret detection (cloud keys, bearer tokens, JWTs, private keys)
+- `check_design_consistency` — design-system drift on UI projects (hex outside tokens, off-scale spacing, fonts/colors over caps)
+- `run_local_checks` — aggregator for ci + branching + secrets + design
+
+**Process & tracking**
+- `start_task` — record hypothesis-first plan + expected reads/writes
+- `propose_change` — validate writes against task scope (hard mode blocks; soft mode warns)
+- `commit_checkpoint` — record actual reads/writes, compute read/write ratio
+- `propose_claude_md_rule` — append agent-proposed rule to `.agent-standards-proposals.md` (humans review)
+- `get_drift_log` — surface trends from `.agent-standards-drift.jsonl` (populated by `run_local_checks`)
+
+**Scaffolding**
 - `init_repo` — scaffold canonical CI for service/library/mobile/web
 
-Next pass (designed, not built):
-- `start_task` — record hypothesis, return contextual info, open task ID
-- `propose_change` — validate scope against hypothesis, enforce hard mode
-- `commit_checkpoint` — token budget tracking, read/write ratio
+## Runtime artefacts
+
+Tools that persist state write to `<repo_root>`:
+- `.agent-standards-drift.jsonl` — appended by `run_local_checks` (gitignored)
+- `.agent-standards-tasks.json` — written by the task-tracking trio (gitignored)
+- `.agent-standards-proposals.md` — appended by `propose_claude_md_rule` (NOT gitignored — meant to be reviewed and committed when accepted)
+
+Add the first two to your project's `.gitignore`. The org-wide `agent-standards/templates/` could carry a fragment to copy.
