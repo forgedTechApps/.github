@@ -35,7 +35,10 @@ style:
   - "Don't re-read files within a session unless you suspect they've changed. Scroll up — the prior result is still in context. Re-running the same Read is wasted context."
   - "Long file or huge log? Read with offset/limit, or filter through grep / head / tail. The whole file in context costs more than the answer is worth."
 
-  # ── UI / component-driven design (applies to any UI surface) ────────────
+style_ui:
+  # ── UI / component-driven design ────────────────────────────────────────
+  # Loaded only when the project's ci.kind is `mobile` or `web`. Saves
+  # tokens on services/libraries/Workers where these don't apply.
   - "Component-driven design: views composed from small, single-purpose, reusable components. A view file > 200 lines is a smell — extract subviews."
   - "Components own their styling and behaviour, never reach into a parent or sibling. Communicate via props/inputs and events/callbacks."
   - "Design tokens (colors, spacing, typography, radii) come from a single source — never hardcode hex values, magic spacing numbers, or font sizes inside a component."

@@ -47,6 +47,12 @@
       "items": { "type": "string" }
     },
 
+    "style_ui": {
+      "type": "array",
+      "description": "UI-specific style rules. Loaded ONLY when the project's ci.kind is 'mobile' or 'web'. Skipped on services / libraries / Workers to save tokens.",
+      "items": { "type": "string" }
+    },
+
     "architecture": {
       "type": "object",
       "additionalProperties": false,
@@ -54,6 +60,11 @@
         "rules": {
           "type": "array",
           "description": "Architectural constraints. Violating these requires explicit user approval.",
+          "items": { "type": "string" }
+        },
+        "rules_ui": {
+          "type": "array",
+          "description": "UI-specific architecture rules. Loaded ONLY when the project's ci.kind is 'mobile' or 'web'.",
           "items": { "type": "string" }
         },
         "feature_path_pattern": {

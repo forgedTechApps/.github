@@ -18,8 +18,12 @@ export interface AgentStandards {
     build?: string;
   };
   style?: string[];
+  /** UI-only style rules; folded into `style` post-merge only when ci.kind is mobile or web. */
+  style_ui?: string[];
   architecture?: {
     rules?: string[];
+    /** UI-only arch rules; folded into `rules` post-merge only when ci.kind is mobile or web. */
+    rules_ui?: string[];
     feature_path_pattern?: string;
     sensitive_paths?: string[];
   };
@@ -174,6 +178,7 @@ export async function loadStandards(repoRoot: string): Promise<AgentStandards> {
   const project = parsed as AgentStandards;
 
   // Resolve extends — load defaults first, then merge project on top.
+  let result: AgentStandards;
   if (project.extends) {
     const targets = Array.isArray(project.extends) ? project.extends : [project.extends];
     let merged: Partial<AgentStandards> = {};
@@ -183,8 +188,56 @@ export async function loadStandards(repoRoot: string): Promise<AgentStandards> {
     }
     merged = mergeStandards(merged, project);
     // Re-cast: required fields (version, repo, language) come from the project file itself.
-    return merged as AgentStandards;
+    result = merged as AgentStandards;
+  } else {
+    result = project;
   }
 
-  return project;
+  return foldUiRules(result);
+}
+
+/**
+ * Conditional UI-rule loading. UI rules live under `style_ui` and
+ * `architecture.rules_ui`. They are folded into `style` / `architecture.rules`
+ * only when ci.kind is 'mobile' or 'web' — saves tokens on services /
+ * libraries / Workers where they don't apply.
+ *
+ * After folding, the `*_ui` keys are removed from the response so the
+ * payload is lean and consumers don't need to know about the split.
+ */
+function foldUiRules(s: AgentStandards): AgentStandards {
+  const isUi = s.ci?.kind === "mobile" || s.ci?.kind === "web";
+
+  // Fold style_ui → style if applicable
+  const styleUi = s.style_ui ?? [];
+  let style = s.style;
+  if (isUi && styleUi.length > 0) {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const v of [...(style ?? []), ...styleUi]) {
+      if (!seen.has(v)) { seen.add(v); merged.push(v); }
+    }
+    style = merged;
+  }
+
+  // Fold architecture.rules_ui → architecture.rules if applicable
+  const archRulesUi = s.architecture?.rules_ui ?? [];
+  let architecture = s.architecture;
+  if (isUi && archRulesUi.length > 0 && architecture) {
+    const seen = new Set<string>();
+    const mergedRules: string[] = [];
+    for (const v of [...(architecture.rules ?? []), ...archRulesUi]) {
+      if (!seen.has(v)) { seen.add(v); mergedRules.push(v); }
+    }
+    architecture = { ...architecture, rules: mergedRules };
+  }
+
+  // Strip the *_ui keys from the response — they've served their purpose
+  const { style_ui: _styleUi, ...rest } = s;
+  const out: AgentStandards = { ...rest, style };
+  if (architecture) {
+    const { rules_ui: _rulesUi, ...archRest } = architecture;
+    out.architecture = archRest;
+  }
+  return out;
 }
