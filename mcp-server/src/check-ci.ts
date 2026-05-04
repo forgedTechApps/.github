@@ -46,6 +46,26 @@ export async function checkCiSetup(
   try {
     raw = await readFile(workflowPath, "utf8");
   } catch {
+    // If the project is opted out of canonical CI, missing ci.yml is expected —
+    // they have their own workflow file under a different name.
+    if (standards.ci?.bespoke) {
+      findings.push({
+        severity: "info",
+        code: "CI_BESPOKE_NO_CANONICAL_FILE",
+        message:
+          `No ${workflowPath} — expected, this repo is bespoke (ci.bespoke: true). ` +
+          `Reason: ${standards.ci.bespoke_reason ?? "(no reason given)"}`,
+      });
+      if (!standards.ci.bespoke_reason) {
+        findings.push({
+          severity: "warn",
+          code: "CI_BESPOKE_MISSING_REASON",
+          message: "ci.bespoke is true but ci.bespoke_reason is not set.",
+        });
+      }
+      return findings;
+    }
+
     findings.push({
       severity: "error",
       code: "CI_MISSING",
