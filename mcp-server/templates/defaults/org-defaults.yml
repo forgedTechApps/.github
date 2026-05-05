@@ -45,6 +45,8 @@ style:
   - "Find before reading. Use Grep / search for symbols and keywords first. Don't Read whole files when a targeted range or rg search will answer the question."
   - "Don't re-read files within a session unless you suspect they've changed. Scroll up — the prior result is still in context. Re-running the same Read is wasted context."
   - "Long file or huge log? Read with offset/limit, or filter through grep / head / tail. The whole file in context costs more than the answer is worth."
+  - "Between unrelated tasks, prefer /clear over patching forward. Stale context from a previous feature drags accuracy and burns tokens. New task = fresh session."
+  - "When stale context is hurting accuracy, prefer /clear over /compact. Use /compact only when continuing the SAME task with significant accumulated history worth preserving — premature compaction loses context the agent then has to re-discover, costing more than it saves."
 
 style_ui:
   # ── UI / component-driven design ────────────────────────────────────────
