@@ -5,7 +5,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { minimatch } from "minimatch";
-import { loadStandards, StandardsError } from "./standards.js";
+import { loadStandards, StandardsError, groupRulesByTier } from "./standards.js";
 import { checkCiSetup } from "./check-ci.js";
 import { checkBranching } from "./check-branching.js";
 import { checkSecrets } from "./check-secrets.js";
@@ -365,7 +365,8 @@ export function createServer(options: CreateServerOptions = {}): Server {
       if (req.params.name === "get_standards") {
         const args = GetStandardsArgs.parse(req.params.arguments ?? {});
         const standards = await loadStandards(args.repo_root);
-        return { content: [{ type: "text", text: JSON.stringify(standards, null, 2) }] };
+        const grouped = groupRulesByTier(standards);
+        return { content: [{ type: "text", text: JSON.stringify(grouped, null, 2) }] };
       }
 
       if (req.params.name === "check_ci_setup") {
@@ -423,7 +424,25 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
           return { path, triggered };
         });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+
+        const grouped = groupRulesByTier(standards);
+        const deferred_invariants = grouped.deferred_invariants.map((d) => ({
+          severity: "info" as const,
+          code: "DEFERRED_INVARIANT_NO_CHECK",
+          rule_id: d.id,
+          message:
+            `Invariant '${d.id ?? d.rule.slice(0, 60)}' declared but check not built. ` +
+            `Owner: ${d.deferred!.owner}, target: ${d.deferred!.target}` +
+            (d.deferred!.issue ? `, issue: ${d.deferred!.issue}` : "") +
+            (d.deferred!.reason ? `. Reason: ${d.deferred!.reason}` : ""),
+        }));
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ paths: result, deferred_invariants }, null, 2),
+          }],
+        };
       }
 
       if (req.params.name === "check_secrets") {

@@ -9,8 +9,8 @@
   "properties": {
     "version": {
       "type": "integer",
-      "const": 1,
-      "description": "Schema version. Bump when making breaking schema changes."
+      "oneOf": [{ "const": 1 }, { "const": 2 }],
+      "description": "Schema version. v2 adds tier metadata on rules; plain strings still accepted as legacy form (tier: practice)."
     },
     "extends": {
       "oneOf": [
@@ -59,14 +59,14 @@
 
     "style": {
       "type": "array",
-      "description": "Coding style rules in plain English. Read by the agent at task start.",
-      "items": { "type": "string" }
+      "description": "Coding style rules. Plain strings (legacy) or tiered objects. Read by the agent at task start.",
+      "items": { "$ref": "#/$defs/tieredRule" }
     },
 
     "style_ui": {
       "type": "array",
       "description": "UI-specific style rules. Loaded ONLY when the project's ci.kind is 'mobile' or 'web'. Skipped on services / libraries / Workers to save tokens.",
-      "items": { "type": "string" }
+      "items": { "$ref": "#/$defs/tieredRule" }
     },
 
     "architecture": {
@@ -75,13 +75,13 @@
       "properties": {
         "rules": {
           "type": "array",
-          "description": "Architectural constraints. Violating these requires explicit user approval.",
-          "items": { "type": "string" }
+          "description": "Architectural constraints. Plain strings (legacy) or tiered objects.",
+          "items": { "$ref": "#/$defs/tieredRule" }
         },
         "rules_ui": {
           "type": "array",
           "description": "UI-specific architecture rules. Loaded ONLY when the project's ci.kind is 'mobile' or 'web'.",
-          "items": { "type": "string" }
+          "items": { "$ref": "#/$defs/tieredRule" }
         },
         "feature_path_pattern": {
           "type": "string",
@@ -266,6 +266,50 @@
   },
 
   "$defs": {
+    "tieredRule": {
+      "oneOf": [
+        { "type": "string", "description": "Legacy plain-string rule. Treated as tier: practice. Schema v3 will deprecate this form." },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rule", "tier"],
+          "properties": {
+            "rule": { "type": "string", "description": "The rule text shown to agents." },
+            "tier": {
+              "type": "string",
+              "enum": ["invariant", "gate", "practice"],
+              "description": "Enforcement tier. Principles do not live in this file — they live in CLAUDE.md."
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "description": "Stable rule identifier for metrics and drift-log correlation."
+            },
+            "check_command": {
+              "type": "string",
+              "description": "Command, MCP tool, or CI job that enforces this rule. Format: 'mcp:tool_name', 'ci:job_name', or 'scripts/path.sh'."
+            },
+            "severity": {
+              "type": "string",
+              "enum": ["error", "warn", "info"],
+              "default": "error"
+            },
+            "deferred": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["owner", "target"],
+              "properties": {
+                "owner": { "type": "string", "description": "Person accountable for landing the check." },
+                "target": { "type": "string", "description": "Target window or milestone (e.g. 'W12', '2026-Q3')." },
+                "reason": { "type": "string", "description": "Why the check isn't built yet." },
+                "issue": { "type": "string", "description": "Tracking issue URL or number." }
+              },
+              "description": "Present when the rule is declared but its check_command isn't yet built. get_standards surfaces these as DEFERRED_INVARIANT_NO_CHECK info findings."
+            }
+          }
+        }
+      ]
+    },
     "modelSpec": {
       "type": "object",
       "additionalProperties": false,

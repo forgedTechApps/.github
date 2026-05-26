@@ -2,17 +2,28 @@
 # Extended by every project's .agent-standards.yml via `extends: forgedtech/org-defaults`.
 #
 # Merge semantics (project file wins):
-#   - Scalars: project value overrides org value (e.g. project unit_min: 70 beats org 60)
+#   - Scalars: project value overrides org value
 #   - Arrays: org values + project values, deduplicated, project order first
 #   - Objects: deep-merged
 #
-# This file is loaded by the MCP server when a project declares `extends:`.
-# Do NOT validate this file on its own — `repo` and `language` are intentionally absent.
+# ── Rule taxonomy (schema v2) ────────────────────────────────────────────
+# This file contains only Invariants, Gates, and Practices.
+# Principles (cultural rules: "functions do one thing", "names communicate
+# intent", etc.) live in agent-standards/templates/PRINCIPLES.md, surfaced
+# from each project's CLAUDE.md.
+#
+# Each rule has a tier:
+#   - invariant: mechanically verifiable. Has check_command. Violation = bug.
+#   - gate:      workflow checkpoint. Halts until satisfied.
+#   - practice:  observable in records, not pre-checked. Drift-log catches.
+#
+# Plain-string rules (legacy form) are treated as tier: practice for
+# backwards compatibility. New rules should use the object form.
+#
+# Deferred invariants carry { owner, target, issue }. check_paths surfaces
+# them as DEFERRED_INVARIANT_NO_CHECK info findings.
 
 # ── Model routing (logical names; CLAUDE.md maps to concrete IDs) ────
-# Two-phase workflow: heavy reasoning on Opus for plans, fast iteration
-# on Sonnet for execution. Projects can override (security-critical
-# repos may want execution: opus too).
 models:
   planning:
     model: opus
@@ -21,69 +32,236 @@ models:
     model: sonnet
 
 style:
-  # ── Software design (universal) ────────────────────────────────────────
-  - "DRY: extract repeated logic into shared modules (packages/shared, common utilities). Three uses = extract."
-  - "SOLID: single responsibility per class/module. Dependency inversion at module boundaries (depend on protocols/interfaces, not concrete types)."
-  - "KISS / YAGNI: build for current requirements. No speculative abstraction. Three similar lines beats a premature factory."
-  - "No commented-out code in committed changes. Delete it — git history is the archive."
-  - "No TODOs without a linked tracking issue (e.g. `// TODO(#123): ...`). Untracked TODOs decay into noise."
-  - "Conventional Commits: feat:, fix:, chore:, test:, docs:, ci:, refactor:, perf:, style:."
-  - "Names communicate intent. Single-letter variables only in tight loops or well-known math (i, j, x, y)."
-  - "Functions do one thing. If a function name uses 'and', split it."
+  # ── Code hygiene (invariants) ──────────────────────────────────────────
+  - rule: "No commented-out code in committed changes. Delete it — git history is the archive."
+    tier: invariant
+    id: no_commented_code
+    check_command: "scripts/check-no-commented-code.sh"
+    severity: error
+    deferred:
+      owner: "Carlos"
+      target: "W6"
+      reason: "Script not yet built — Increment 6"
 
-  # ── Workflow discipline (how to run a coding session) ──────────────────
-  - "Plan before coding. State hypothesis + intended file changes + test approach BEFORE writing code. Confirm with the user if the change is non-trivial."
-  - "Break tasks into 3–5 focused chunks. If a single task takes more than ~5 file changes or branches into >2 unrelated areas, split it."
-  - "Scope discipline: implement exactly what was requested. No 'while I'm here' refactors, no speculative additions. If you spot something else worth doing, mention it and stop."
-  - "Refactor only after it works. Make the feature pass tests first; restructure second. Refactoring mid-feature loses the thread and creates rework."
-  - "Tests are non-negotiable; the order depends on the spec. Known behaviour (services, invariants, bug fixes) → test-first. Unknown behaviour (new feature, novel UI) → build-then-test in a fix-loop. Either way, tests ship with the change."
-  - "After every two search/read operations, write findings somewhere durable (the plan, a TODO comment, a scratch note). Reading without recording loses context."
-  - "Be explicit about constraints in your own work: when picking a pattern, use the existing one in the codebase. When adding behaviour, change only the files needed. No new dependencies without justification."
-  - "If you (the agent) made a mistake the user had to correct, propose a one-line addition to CLAUDE.md or .agent-standards.yml that would have prevented it. The user accepts or declines — never auto-edit those files."
+  - rule: "No TODOs without a linked tracking issue (e.g. `// TODO(#123): ...`). Untracked TODOs decay into noise."
+    tier: invariant
+    id: no_untracked_todos
+    check_command: "scripts/check-todos-tracked.sh"
+    severity: error
+    deferred:
+      owner: "Carlos"
+      target: "W6"
+      reason: "Script not yet built — Increment 6"
 
-  # ── Token / context discipline ─────────────────────────────────────────
-  - "Find before reading. Use Grep / search for symbols and keywords first. Don't Read whole files when a targeted range or rg search will answer the question."
-  - "Don't re-read files within a session unless you suspect they've changed. Scroll up — the prior result is still in context. Re-running the same Read is wasted context."
-  - "Long file or huge log? Read with offset/limit, or filter through grep / head / tail. The whole file in context costs more than the answer is worth."
-  - "Between unrelated tasks, prefer /clear over patching forward. Stale context from a previous feature drags accuracy and burns tokens. New task = fresh session."
-  - "When stale context is hurting accuracy, prefer /clear over /compact. Use /compact only when continuing the SAME task with significant accumulated history worth preserving — premature compaction loses context the agent then has to re-discover, costing more than it saves."
+  - rule: "Conventional Commits: feat:, fix:, chore:, test:, docs:, ci:, refactor:, perf:, style:."
+    tier: invariant
+    id: conventional_commits
+    check_command: "ci:commitlint"
+    severity: error
+
+  # ── Software design (practices) ────────────────────────────────────────
+  - rule: "Three uses = extract to a shared module (packages/shared, common utilities)."
+    tier: practice
+    id: three_uses_extract
+
+  # ── Workflow discipline (practices) ────────────────────────────────────
+  - rule: "Plan before coding. State hypothesis + intended file changes + test approach BEFORE writing code. Confirm with the user if the change is non-trivial."
+    tier: practice
+    id: plan_before_code
+
+  - rule: "Break tasks into 3–5 focused chunks. If a single task takes more than ~5 file changes or branches into >2 unrelated areas, split it."
+    tier: practice
+    id: task_chunking
+
+  - rule: "Tests are non-negotiable; the order depends on the spec. Known behaviour (services, invariants, bug fixes) → test-first. Unknown behaviour (new feature, novel UI) → build-then-test in a fix-loop. Either way, tests ship with the change."
+    tier: practice
+    id: test_order_by_spec
+
+  - rule: "After every two search/read operations, write findings somewhere durable (the plan, a TODO comment, a scratch note). Reading without recording loses context."
+    tier: practice
+    id: durable_findings
+
+  - rule: "Be explicit about constraints: when picking a pattern, use the existing one in the codebase. When adding behaviour, change only the files needed. No new dependencies without justification."
+    tier: practice
+    id: explicit_constraints
+
+  - rule: "If you (the agent) made a mistake the user had to correct, propose a one-line addition to CLAUDE.md or .agent-standards.yml via propose_claude_md_rule. The user accepts or declines — never auto-edit."
+    tier: practice
+    id: propose_rule_after_correction
+
+  # ── Token / context discipline (practices) ─────────────────────────────
+  - rule: "Find before reading. Use Grep / search for symbols and keywords first. Don't Read whole files when a targeted range or rg search will answer the question."
+    tier: practice
+    id: find_before_read
+
+  - rule: "Don't re-read files within a session unless you suspect they've changed. Scroll up — the prior result is still in context. Re-running the same Read is wasted context."
+    tier: practice
+    id: no_redundant_reads
+
+  - rule: "Long file or huge log? Read with offset/limit, or filter through grep / head / tail."
+    tier: practice
+    id: offset_limit_for_long_files
+
+  - rule: "Between unrelated tasks, prefer /clear over patching forward. Stale context drags accuracy and burns tokens."
+    tier: practice
+    id: clear_between_unrelated_tasks
+
+  - rule: "When stale context is hurting accuracy, prefer /clear over /compact. Use /compact only when continuing the SAME task with significant accumulated history worth preserving."
+    tier: practice
+    id: compact_only_for_same_task
 
 style_ui:
   # ── UI / component-driven design ────────────────────────────────────────
-  # Loaded only when the project's ci.kind is `mobile` or `web`. Saves
-  # tokens on services/libraries/Workers where these don't apply.
-  - "Component-driven design: views composed from small, single-purpose, reusable components. A view file > 200 lines is a smell — extract subviews."
-  - "Components own their styling and behaviour, never reach into a parent or sibling. Communicate via props/inputs and events/callbacks."
-  - "Design tokens (colors, spacing, typography, radii) come from a single source — never hardcode hex values, magic spacing numbers, or font sizes inside a component."
-  - "A shared component library (e.g. packages/ui, design-system, or per-project equivalent) is the home for cross-feature primitives. Feature folders consume from it; they never re-implement a Button, Card, Modal, etc."
-  - "Storybook / catalog page / preview app for the component library when feasible — components are easier to reuse when they're discoverable."
+  # Loaded only when the project's ci.kind is `mobile` or `web`.
+  - rule: "Component-driven design: views composed from small, single-purpose, reusable components."
+    tier: practice
+    id: component_driven_design
+
+  - rule: "A view file > 200 lines is a smell — extract subviews."
+    tier: invariant
+    id: view_size_limit
+    check_command: "scripts/check-view-size.sh"
+    severity: warn
+    deferred:
+      owner: "Carlos"
+      target: "Beyond W15"
+      reason: "Not on critical path; promote when metrics justify."
+
+  - rule: "Design tokens (colors, spacing, typography, radii) come from a single source — never hardcode hex values, magic spacing numbers, or font sizes inside a component."
+    tier: invariant
+    id: design_tokens_only
+    check_command: "mcp:check_design_consistency"
+    severity: error
+
+  - rule: "A shared component library is the home for cross-feature primitives. Feature folders consume from it; they never re-implement a Button, Card, Modal, etc."
+    tier: practice
+    id: shared_component_library
+
+  - rule: "Storybook / catalog page / preview app for the component library when feasible."
+    tier: practice
+    id: component_catalog
 
 architecture:
   rules:
     # ── Boundaries & inputs ────────────────────────────────────────────────
-    - "Input validation at every system boundary: HTTP, queue, file I/O, IPC. Validate once at the boundary; trust internally."
-    - "Authorisation at the resource level, not just the route. Every read/write checks the requesting principal can act on THIS object."
-    - "External HTTP calls must set explicit timeouts and have a documented failure mode (retry, circuit-break, fallback). No bare unbounded fetch()."
-    - "Logging never includes PII, credentials, tokens, or full request bodies. Mask or omit at the logger, not the call site."
+    - rule: "Input validation at every system boundary: HTTP, queue, file I/O, IPC. Validate once at the boundary; trust internally."
+      tier: practice
+      id: input_validation_at_boundary
+
+    - rule: "Authorisation at the resource level, not just the route. Every read/write checks the requesting principal can act on THIS object."
+      tier: practice
+      id: authorisation_at_resource_level
+      deferred:
+        owner: "Carlos"
+        target: "W18"
+        reason: "Generic AST check infeasible. Mitigated via cross-tenant integration test as Invariant."
+        issue: "https://github.com/forgedTechApps/.github/issues/7"
+
+    - rule: "External HTTP calls must set explicit timeouts and have a documented failure mode (retry, circuit-break, fallback). No bare unbounded fetch()."
+      tier: invariant
+      id: external_http_has_timeout
+      check_command: "scripts/check-http-timeouts.sh"
+      severity: error
+      deferred:
+        owner: "Carlos"
+        target: "W13"
+        issue: "https://github.com/forgedTechApps/.github/issues/6"
+
+    - rule: "Logging never includes PII, credentials, tokens, or full request bodies. Mask or omit at the logger, not the call site."
+      tier: practice
+      id: no_pii_in_logs
+      deferred:
+        owner: "Carlos"
+        target: "W13"
+        reason: "Will promote to Invariant when log-format pre-commit ships."
+        issue: "https://github.com/forgedTechApps/.github/issues/5"
 
     # ── Secrets & config ───────────────────────────────────────────────────
-    - "Secrets via environment variables or a secret store ONLY. Never in committed files (.env, source, config). Pre-commit / CI scans must reject."
-    - "All deployable services declare a complete .env.example documenting every required variable — no surprise config in production."
-    - "Service-role keys / admin tokens never flow to clients. Server-only."
+    - rule: "Secrets via environment variables or a secret store ONLY. Never in committed files (.env, source, config). Pre-commit / CI scans must reject."
+      tier: invariant
+      id: no_committed_secrets
+      check_command: "mcp:check_secrets"
+      severity: error
+
+    - rule: "All deployable services declare a complete .env.example documenting every required variable — no surprise config in production."
+      tier: invariant
+      id: env_example_present
+      check_command: "scripts/check-env-example.sh"
+      severity: error
+      deferred:
+        owner: "Carlos"
+        target: "Beyond W15"
+
+    - rule: "Service-role keys / admin tokens never flow to clients. Server-only."
+      tier: invariant
+      id: service_role_keys_not_in_client
+      check_command: "scripts/check-client-bundle-secrets.sh"
+      severity: error
+      deferred:
+        owner: "Carlos"
+        target: "W12"
+        issue: "https://github.com/forgedTechApps/.github/issues/3"
 
     # ── Data integrity ─────────────────────────────────────────────────────
-    - "SQL: parameterised queries only. String concatenation in queries is rejected at review."
-    - "Schema migrations are forward-only and reversible (or document why not). Destructive migrations (DROP, NOT NULL on existing) require explicit user approval."
-    - "Database access goes through a repository / data-access layer — UI / route handlers never touch the DB driver directly."
+    - rule: "SQL: parameterised queries only. String concatenation in queries is rejected."
+      tier: invariant
+      id: parameterised_queries_only
+      check_command: "ci:semgrep-sqli"
+      severity: error
+      deferred:
+        owner: "Carlos"
+        target: "W12"
+        issue: "https://github.com/forgedTechApps/.github/issues/4"
+
+    - rule: "Schema migrations are forward-only and reversible (or document why not). Destructive migrations (DROP, NOT NULL on existing) require explicit user approval."
+      tier: practice
+      id: migrations_forward_only
+
+    - rule: "Database access goes through a repository / data-access layer — UI / route handlers never touch the DB driver directly."
+      tier: invariant
+      id: db_access_via_dal
+      check_command: "scripts/check-dal-only.sh"
+      severity: error
+      deferred:
+        owner: "Carlos"
+        target: "Beyond W15"
 
     # ── HTTP services ──────────────────────────────────────────────────────
-    - "HTTP services set security headers: Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options: nosniff, X-Frame-Options: DENY (or frame-ancestors), Referrer-Policy: strict-origin-when-cross-origin."
-    - "CORS allowlist is explicit per-origin. No `*` for endpoints that handle credentials."
-    - "Rate-limit every public endpoint. Document the limit; surface 429 with Retry-After."
+    - rule: "HTTP services set security headers: Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options: nosniff, X-Frame-Options: DENY (or frame-ancestors), Referrer-Policy: strict-origin-when-cross-origin."
+      tier: invariant
+      id: http_security_headers
+      check_command: "scripts/check-security-headers.sh"
+      severity: error
+      deferred:
+        owner: "Carlos"
+        target: "Beyond W15"
 
-    # ── OWASP Top 10 awareness ─────────────────────────────────────────────
-    - "Auth changes are reviewed against OWASP ASVS Level 1 minimum (https://owasp.org/www-project-application-security-verification-standard/)."
-    - "Any change touching auth, input handling, data access, or templating triggers an OWASP Top 10 mental review: A01 broken access control, A02 cryptographic failures, A03 injection, A04 insecure design, A05 security misconfiguration, A06 vulnerable components, A07 authn failures, A08 software/data integrity, A09 logging/monitoring failures, A10 SSRF."
+    - rule: "CORS allowlist is explicit per-origin. No `*` for endpoints that handle credentials."
+      tier: invariant
+      id: cors_explicit_origins
+      check_command: "scripts/check-cors-config.sh"
+      severity: error
+      deferred:
+        owner: "Carlos"
+        target: "Beyond W15"
+
+    - rule: "Rate-limit every public endpoint. Document the limit; surface 429 with Retry-After."
+      tier: practice
+      id: public_endpoints_rate_limited
+
+    # ── OWASP awareness ────────────────────────────────────────────────────
+    - rule: "Auth changes reviewed against OWASP ASVS Level 1 minimum (https://owasp.org/www-project-application-security-verification-standard/). Attach asvs_review artifact to the task record."
+      tier: gate
+      id: auth_change_asvs_artifact
+      check_command: "mcp:attach_asvs_review"
+      severity: error
+      deferred:
+        owner: "Carlos"
+        target: "W5"
+
+    - rule: "Any change touching auth, input handling, data access, or templating triggers an OWASP Top 10 mental review (A01–A10)."
+      tier: practice
+      id: owasp_top_10_mental_review
 
   sensitive_paths:
     - "**/.env*"
@@ -124,11 +302,10 @@ branching:
   mode: soft
 
 # ── Vulnerability scanning (org policy) ────────────────────────────────────
-# This is enforced by the canonical .github/workflows/security-scan.yml +
-# the dependency-audit step inside every quality-gate-*.yml. Documented here
-# so agents see the policy when they read get_standards.
+# Enforced by the canonical .github/workflows/security-scan.yml +
+# the dependency-audit step inside every quality-gate-*.yml.
 #
-# Required scans, all run automatically on every PR via reusable workflows:
+# Required scans, run automatically on every PR via reusable workflows:
 #   1. CodeQL SAST (security-extended + security-and-quality queries)
 #   2. OWASP Dependency-Check (CVSS >= 7 fails the build)
 #   3. OSV Scanner against language lockfiles (Swift Package.resolved, etc.)

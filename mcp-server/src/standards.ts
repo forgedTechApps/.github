@@ -5,8 +5,31 @@ import { parse as parseYaml } from "yaml";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import schema from "../../agent-standards/schema/agent-standards.schema.json" with { type: "json" };
 
+export type Tier = "invariant" | "gate" | "practice";
+
+export interface DeferredCheck {
+  owner: string;
+  target: string;
+  reason?: string;
+  issue?: string;
+}
+
+export interface NormalisedRule {
+  rule: string;
+  tier: Tier;
+  id?: string;
+  check_command?: string;
+  severity: "error" | "warn" | "info";
+  deferred?: DeferredCheck;
+}
+
+/** A rule as it appears in YAML: either a legacy plain string or a tiered object. */
+export type RawRule =
+  | string
+  | (Omit<NormalisedRule, "severity"> & { severity?: "error" | "warn" | "info" });
+
 export interface AgentStandards {
-  version: 1;
+  version: 1 | 2;
   extends?: string | string[];
   repo: string;
   language: "swift" | "flutter" | "node" | "python" | "dotnet" | "mixed";
@@ -17,13 +40,13 @@ export interface AgentStandards {
     format?: string;
     build?: string;
   };
-  style?: string[];
+  style?: RawRule[];
   /** UI-only style rules; folded into `style` post-merge only when ci.kind is mobile or web. */
-  style_ui?: string[];
+  style_ui?: RawRule[];
   architecture?: {
-    rules?: string[];
+    rules?: RawRule[];
     /** UI-only arch rules; folded into `rules` post-merge only when ci.kind is mobile or web. */
-    rules_ui?: string[];
+    rules_ui?: RawRule[];
     feature_path_pattern?: string;
     sensitive_paths?: string[];
   };
@@ -233,28 +256,28 @@ export async function loadStandards(repoRoot: string): Promise<AgentStandards> {
 function foldUiRules(s: AgentStandards): AgentStandards {
   const isUi = s.ci?.kind === "mobile" || s.ci?.kind === "web";
 
+  const dedupe = (rules: RawRule[]): RawRule[] => {
+    const seen = new Set<string>();
+    const out: RawRule[] = [];
+    for (const v of rules) {
+      const key = typeof v === "string" ? v : JSON.stringify(v);
+      if (!seen.has(key)) { seen.add(key); out.push(v); }
+    }
+    return out;
+  };
+
   // Fold style_ui → style if applicable
   const styleUi = s.style_ui ?? [];
   let style = s.style;
   if (isUi && styleUi.length > 0) {
-    const seen = new Set<string>();
-    const merged: string[] = [];
-    for (const v of [...(style ?? []), ...styleUi]) {
-      if (!seen.has(v)) { seen.add(v); merged.push(v); }
-    }
-    style = merged;
+    style = dedupe([...(style ?? []), ...styleUi]);
   }
 
   // Fold architecture.rules_ui → architecture.rules if applicable
   const archRulesUi = s.architecture?.rules_ui ?? [];
   let architecture = s.architecture;
   if (isUi && archRulesUi.length > 0 && architecture) {
-    const seen = new Set<string>();
-    const mergedRules: string[] = [];
-    for (const v of [...(architecture.rules ?? []), ...archRulesUi]) {
-      if (!seen.has(v)) { seen.add(v); mergedRules.push(v); }
-    }
-    architecture = { ...architecture, rules: mergedRules };
+    architecture = { ...architecture, rules: dedupe([...(architecture.rules ?? []), ...archRulesUi]) };
   }
 
   // Strip the *_ui keys from the response — they've served their purpose
@@ -265,4 +288,55 @@ function foldUiRules(s: AgentStandards): AgentStandards {
     out.architecture = archRest;
   }
   return out;
+}
+
+/**
+ * Normalise a raw rule (string or object) to a NormalisedRule with explicit
+ * tier and severity. Plain strings default to tier=practice, severity=error.
+ */
+export function normaliseRule(r: RawRule): NormalisedRule {
+  if (typeof r === "string") {
+    return { rule: r, tier: "practice", severity: "error" };
+  }
+  return { severity: "error", ...r };
+}
+
+export type RuleSource = "style" | "style_ui" | "architecture.rules" | "architecture.rules_ui";
+
+export interface StandardsWithTiers extends AgentStandards {
+  rules_by_tier: {
+    invariant: Array<NormalisedRule & { source: RuleSource }>;
+    gate: Array<NormalisedRule & { source: RuleSource }>;
+    practice: Array<NormalisedRule & { source: RuleSource }>;
+  };
+  deferred_invariants: Array<NormalisedRule & { source: RuleSource }>;
+}
+
+/**
+ * Returns standards with rule arrays normalised and grouped by tier. Original
+ * arrays are preserved on the root object so existing consumers don't break.
+ * `deferred_invariants` collects invariants whose check_command isn't yet
+ * built — surfaced by check_paths as DEFERRED_INVARIANT_NO_CHECK info.
+ */
+export function groupRulesByTier(s: AgentStandards): StandardsWithTiers {
+  const groups: StandardsWithTiers["rules_by_tier"] = { invariant: [], gate: [], practice: [] };
+  const deferred: StandardsWithTiers["deferred_invariants"] = [];
+
+  const collect = (arr: RawRule[] | undefined, source: RuleSource) => {
+    for (const raw of arr ?? []) {
+      const n = normaliseRule(raw);
+      const withSource = { ...n, source };
+      groups[n.tier].push(withSource);
+      if (n.tier === "invariant" && n.deferred) {
+        deferred.push(withSource);
+      }
+    }
+  };
+
+  collect(s.style, "style");
+  collect(s.style_ui, "style_ui");
+  collect(s.architecture?.rules, "architecture.rules");
+  collect(s.architecture?.rules_ui, "architecture.rules_ui");
+
+  return { ...s, rules_by_tier: groups, deferred_invariants: deferred };
 }
