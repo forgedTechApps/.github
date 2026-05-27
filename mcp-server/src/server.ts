@@ -16,6 +16,7 @@ import { checkClientBundleSecrets } from "./check-client-bundle-secrets.js";
 import { checkSqlInjection } from "./check-sql-injection.js";
 import { checkLogPii } from "./check-log-pii.js";
 import { checkHttpTimeouts } from "./check-http-timeouts.js";
+import { getRuleMetrics } from "./rule-metrics.js";
 import { proposeRule } from "./propose-rule.js";
 import { appendDrift, getDriftLog } from "./drift-log.js";
 import {
@@ -100,6 +101,12 @@ export function createServer(options: CreateServerOptions = {}): Server {
   const CheckSqlInjectionArgs = z.object({ repo_root: RepoRoot });
   const CheckLogPiiArgs = z.object({ repo_root: RepoRoot });
   const CheckHttpTimeoutsArgs = z.object({ repo_root: RepoRoot });
+
+  const GetRuleMetricsArgs = z.object({
+    repo_root: RepoRoot,
+    rule_id: z.string().optional(),
+    window_days: z.number().int().min(1).max(365).optional(),
+  });
 
   const RunLocalChecksArgs = z.object({
     repo_root: RepoRoot,
@@ -371,6 +378,24 @@ export function createServer(options: CreateServerOptions = {}): Server {
           type: "object",
           required: defaultRepoRoot ? [] : ["repo_root"],
           properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "get_rule_metrics",
+        description:
+          "Per-rule metrics over a time window (Increment 11). Reads the drift log, maps codes to " +
+          "rule IDs, groups by rule + severity. Surfaces two lists: rules_with_events (sorted by " +
+          "count, most-fired first) and rules_with_zero_events (declared in .agent-standards.yml but " +
+          "never fired in the window — candidates for demotion/deletion in the quarterly review). " +
+          "Window defaults to 90 days (one quarter). Pass rule_id to filter to a single rule.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: {
+            repo_root: repoRootProp,
+            rule_id: { type: "string", description: "Filter to a single rule ID (e.g. 'no_commented_code')." },
+            window_days: { type: "integer", minimum: 1, maximum: 365, default: 90, description: "Window in days. Default 90 (quarterly review)." },
+          },
         },
       },
       {
@@ -707,6 +732,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
         await appendDrift(args.repo_root, "check_http_timeouts", findings);
         const isError = findings.some((f) => f.severity === "error");
         return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "get_rule_metrics") {
+        const args = GetRuleMetricsArgs.parse(req.params.arguments ?? {});
+        const result = await getRuleMetrics(args.repo_root, {
+          rule_id: args.rule_id,
+          window_days: args.window_days,
+        });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
       if (req.params.name === "run_local_checks") {
