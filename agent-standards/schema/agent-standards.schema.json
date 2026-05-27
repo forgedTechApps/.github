@@ -189,6 +189,15 @@
               "type": "array",
               "items": { "type": "string" },
               "description": "Method names that are legitimately tenant-free (e.g. 'create' on the tenant entity itself, cross-tenant scanner queries). Each entry should ALSO carry a bypass comment in source; this is a project-level allowlist for repeated patterns."
+            },
+            "cross_tenant_test_file": {
+              "type": "string",
+              "description": "Path to a parameterised integration test that hits every authenticated route with a foreign tenant ID and asserts 403. When set, check_cross_tenant_test verifies the file exists and its assertion count grows with new authenticated routes."
+            },
+            "route_files": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Glob patterns for route files. Used by check_cross_tenant_test to count authenticated routes for parity. Defaults to heuristic if unset."
             }
           }
         }

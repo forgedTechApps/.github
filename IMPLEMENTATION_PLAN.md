@@ -324,6 +324,28 @@ extra weeks address the limits that remain.
 
 ### Week 16 — Model-routing observed-vs-declared
 
+**Outcome (2026-05-27):** Investigated. `forge-pipe-mcp` is a project in the
+org, not a proxy intercepting Claude Code → Anthropic API traffic. There's
+no in-path component this framework controls. Cost-side detection would
+require Anthropic billing API access, also outside scope.
+
+**Accepted limitation:** model routing remains honour-system at this site.
+Mitigations already in place:
+  - `start_task` blocks when declared `current_model` doesn't match the
+    phase's expected family (Increment 2).
+  - `propose_change` blocks for execution-phase model mismatch.
+  - SessionStart hook surfaces the expected routing at session start
+    (Increment 9).
+
+These don't catch a lying agent, but they catch a forgetful one — which is
+the realistic failure mode. The honest documentation of the gap (in
+FRAMEWORK_PRACTICES.md §9 and elsewhere) is the substantive deliverable.
+
+---
+
+#### Original W16 spec (kept for posterity)
+
+
 **Only solve for the honour-system problem.** Wire forge-pipe to write the
 observed model to a session log the MCP server reads. `start_task` cross-checks
 declared vs observed, fails on mismatch.

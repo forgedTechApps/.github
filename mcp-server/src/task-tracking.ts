@@ -51,7 +51,11 @@ export interface TaskRecord {
   root_cause?: string;
   // ── Surface uncertainty (Increment 8.5) ──
   uncertainties?: SurfacedUncertainty[];
+  // ── Reversibility (Beyond-W15, W19) ──
+  reversibility?: Reversibility;
 }
+
+export type Reversibility = "easy" | "moderate" | "hard";
 
 export type TaskType = "feature" | "bugfix" | "architecture" | "auth_change" | "trivial";
 
@@ -128,6 +132,8 @@ export interface StartTaskArgs {
   // ── Task classification + bugfix root cause (Increment 8.5) ──
   task_type?: TaskType;
   root_cause?: string;
+  // ── Reversibility (Beyond-W15, W19) ──
+  reversibility?: Reversibility;
 }
 
 export interface StartTaskResult {
@@ -270,9 +276,13 @@ export async function startTask(
     size: args.size,
     task_type: args.task_type,
     root_cause: args.root_cause,
+    reversibility: args.reversibility,
   };
   if (dorEnabled && phase === "execution" && size === "trivial") {
     task.notes.push(`[${new Date().toISOString()}] DoR bypassed via size='trivial'.`);
+  }
+  if (args.reversibility === "hard") {
+    task.notes.push(`[${new Date().toISOString()}] HARD reversibility declared — verify rollback plan exists before any propose_change.`);
   }
   data.tasks.push(task);
   data.active_task_id = task.id;
@@ -287,6 +297,11 @@ export async function startTask(
   }
   if (dorEnabled && phase === "planning") {
     tips.push("DoR gate is enabled — fill scope_statement / files_intended / test_approach / definition_of_done / out_of_scope before transitioning to execution.");
+  }
+  if (args.reversibility === "hard") {
+    tips.push("⚠️  HARD reversibility declared. Confirm with the user that the rollback plan exists before propose_change. Hard-to-reverse changes (migrations, deploys, data deletions) compound the cost of being wrong.");
+  } else if (args.reversibility === "moderate") {
+    tips.push("Moderate reversibility — make sure git checkpoints are clean before each propose_change.");
   }
 
   return {
