@@ -7,3 +7,5 @@ node_modules
 .agent-standards-tasks.json
 # .agent-standards-proposals.md is intentionally NOT gitignored —
 # proposed-rules are meant to be reviewed and committed when accepted.
+
+.agent-state/

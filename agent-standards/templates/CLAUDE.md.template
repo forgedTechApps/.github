@@ -9,8 +9,25 @@ reference) and edit project-specific bits.
 > - **Policy** lives in `.agent-standards.yml`, served by the agent-standards MCP.
 >   `extends: forgedtech/org-defaults` flows org-wide rules into every project.
 > - **Workflow** lives in this file (`CLAUDE.md`). Read at session start.
+> - **Principles** (cultural guidelines, unenforceable) live in
+>   [`agent-standards/templates/PRINCIPLES.md`](../forgedtech/agent-standards/templates/PRINCIPLES.md)
+>   — referenced below.
 > - **Tooling** lives in `.mcp.json` and `.claude/`. The MCP servers and IDE
 >   config that make policy + workflow enforceable.
+
+---
+
+## Principles
+
+Cultural guidelines that inform judgement when the rulebook is silent. They
+are not enforceable — that's by design. See
+[`PRINCIPLES.md`](../forgedtech/agent-standards/templates/PRINCIPLES.md) for
+the full list (functions do one thing, names communicate intent, scope
+discipline, refactor only after working, components own their styling).
+
+Project-specific principles can be appended below the link. If a principle
+gets invoked repeatedly to justify a decision, propose promoting it to a
+Practice or Gate via `propose_claude_md_rule`.
 
 ---
 
