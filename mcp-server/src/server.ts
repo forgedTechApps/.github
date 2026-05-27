@@ -13,6 +13,9 @@ import { checkDesignConsistency } from "./check-design-consistency.js";
 import { checkCodebaseHygiene } from "./check-codebase-hygiene.js";
 import { checkTenantIsolation } from "./check-tenant-isolation.js";
 import { checkCrossTenantTest } from "./check-cross-tenant-test.js";
+import { checkEnvExample } from "./check-env-example.js";
+import { checkViewSize } from "./check-view-size.js";
+import { checkHttpSecurity } from "./check-http-security.js";
 import { checkClientBundleSecrets } from "./check-client-bundle-secrets.js";
 import { checkSqlInjection } from "./check-sql-injection.js";
 import { checkLogPii } from "./check-log-pii.js";
@@ -100,6 +103,9 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
   const CheckTenantIsolationArgs = z.object({ repo_root: RepoRoot });
   const CheckCrossTenantTestArgs = z.object({ repo_root: RepoRoot });
+  const CheckEnvExampleArgs = z.object({ repo_root: RepoRoot });
+  const CheckViewSizeArgs = z.object({ repo_root: RepoRoot });
+  const CheckHttpSecurityArgs = z.object({ repo_root: RepoRoot });
   const CheckClientBundleSecretsArgs = z.object({ repo_root: RepoRoot });
   const CheckSqlInjectionArgs = z.object({ repo_root: RepoRoot });
   const CheckLogPiiArgs = z.object({ repo_root: RepoRoot });
@@ -113,7 +119,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
   const RunLocalChecksArgs = z.object({
     repo_root: RepoRoot,
-    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test"])).optional(),
+    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test", "env_example", "view_size", "http_security"])).optional(),
     secrets_scope: z.enum(["staged", "tracked", "all"]).default("staged"),
   });
 
@@ -353,6 +359,46 @@ export function createServer(options: CreateServerOptions = {}): Server {
           "routes via parameterisation. Heuristic patterns for routes (Express/Fastify/FastAPI) and " +
           "for 403 assertions (Jest/Vitest/pytest). Route file globs default to '**/routes/**' + " +
           "'**/router.py' + '**/*.routes.ts' — override via architecture.tenant_isolation.route_files.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "check_env_example",
+        description:
+          "Verifies .env.example (or .env.sample / .env.template) exists if env vars are referenced " +
+          "from source, and that every referenced var has an entry. Recognises process.env.X, " +
+          "process.env['X'], import.meta.env.X, os.environ['X'], os.environ.get('X'), os.getenv('X'). " +
+          "Exempts built-ins (NODE_ENV, PATH, etc.) and public prefixes (NEXT_PUBLIC_, VITE_, " +
+          "EXPO_PUBLIC_, REACT_APP_).",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "check_view_size",
+        description:
+          "View/component file-size check. Flags files over architecture.view_size_limit_lines " +
+          "(default 200). Mobile/web only (no-op for service/library). Heuristic globs for React, " +
+          "Vue, Svelte, Flutter, SwiftUI. Override globs via architecture.view_size_paths.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "check_http_security",
+        description:
+          "HTTP security headers + CORS check. For ci.kind='service' only. Verifies HSTS, CSP, " +
+          "X-Content-Type-Options, X-Frame-Options (or frame-ancestors), Referrer-Policy are set " +
+          "somewhere in source — passes if a known headers library (helmet, fastify-helmet, etc.) " +
+          "is detected. Flags dangerous CORS combos (wildcard origin + credentials: true) per-file. " +
+          "Skip via architecture.http_security_skip=true for worker-only deployments.",
         inputSchema: {
           type: "object",
           required: defaultRepoRoot ? [] : ["repo_root"],
@@ -793,6 +839,32 @@ export function createServer(options: CreateServerOptions = {}): Server {
         return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
       }
 
+      if (req.params.name === "check_env_example") {
+        const args = CheckEnvExampleArgs.parse(req.params.arguments ?? {});
+        const findings = await checkEnvExample(args.repo_root);
+        await appendDrift(args.repo_root, "check_env_example", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "check_view_size") {
+        const args = CheckViewSizeArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkViewSize(args.repo_root, standards);
+        await appendDrift(args.repo_root, "check_view_size", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "check_http_security") {
+        const args = CheckHttpSecurityArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkHttpSecurity(args.repo_root, standards);
+        await appendDrift(args.repo_root, "check_http_security", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
       if (req.params.name === "check_client_bundle_secrets") {
         const args = CheckClientBundleSecretsArgs.parse(req.params.arguments ?? {});
         const standards = await loadStandards(args.repo_root);
@@ -838,7 +910,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
       if (req.params.name === "run_local_checks") {
         const args = RunLocalChecksArgs.parse(req.params.arguments ?? {});
-        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test"]);
+        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test", "env_example", "view_size", "http_security"]);
         const standards = await loadStandards(args.repo_root);
         const sections: Array<{ source: string; findings: import("./check-ci.js").Finding[] }> = [];
         if (include.has("ci")) {
@@ -895,6 +967,21 @@ export function createServer(options: CreateServerOptions = {}): Server {
           const f = await checkCrossTenantTest(args.repo_root, standards);
           sections.push({ source: "check_cross_tenant_test", findings: f });
           await appendDrift(args.repo_root, "check_cross_tenant_test", f);
+        }
+        if (include.has("env_example")) {
+          const f = await checkEnvExample(args.repo_root);
+          sections.push({ source: "check_env_example", findings: f });
+          await appendDrift(args.repo_root, "check_env_example", f);
+        }
+        if (include.has("view_size")) {
+          const f = await checkViewSize(args.repo_root, standards);
+          sections.push({ source: "check_view_size", findings: f });
+          await appendDrift(args.repo_root, "check_view_size", f);
+        }
+        if (include.has("http_security")) {
+          const f = await checkHttpSecurity(args.repo_root, standards);
+          sections.push({ source: "check_http_security", findings: f });
+          await appendDrift(args.repo_root, "check_http_security", f);
         }
         const isError = sections.some((s) => s.findings.some((f) => f.severity === "error"));
         return { isError, content: [{ type: "text", text: JSON.stringify(sections, null, 2) }] };
