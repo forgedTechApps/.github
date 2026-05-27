@@ -65,6 +65,9 @@ const CODE_TO_RULE_ID: Record<string, string> = {
   TASK_AUTH_NO_ASVS_ARTIFACT: "auth_change_asvs_artifact",
   TASK_WRONG_MODEL_FOR_EXECUTION: "model_phase_routing",
   TASK_PLANNING_PHASE_WRITE: "model_phase_routing",
+  // Increment 8.5 gates
+  TASK_OPEN_UNCERTAINTY: "surface_uncertainty_gate",
+  TASK_BUGFIX_NO_ROOT_CAUSE: "bugfix_root_cause_gate",
 };
 
 interface DriftEntry {

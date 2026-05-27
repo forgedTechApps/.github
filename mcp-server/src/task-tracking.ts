@@ -46,6 +46,28 @@ export interface TaskRecord {
   size?: "trivial" | "standard" | "large";
   // ── Auth-change ASVS artifact (Increment 5) ──
   asvs_review?: AsvsReview;
+  // ── Task classification + bugfix root cause (Increment 8.5) ──
+  task_type?: TaskType;
+  root_cause?: string;
+  // ── Surface uncertainty (Increment 8.5) ──
+  uncertainties?: SurfacedUncertainty[];
+}
+
+export type TaskType = "feature" | "bugfix" | "architecture" | "auth_change" | "trivial";
+
+export type UncertaintyCategory =
+  | "ambiguous_spec"
+  | "unknown_dependency"
+  | "conflicting_rule"
+  | "unexpected_state";
+
+export interface SurfacedUncertainty {
+  category: UncertaintyCategory;
+  description: string;
+  proposed_options: string[];
+  surfaced_at: string;
+  resolved_at?: string;
+  resolution?: string;
 }
 
 export interface AsvsReview {
@@ -103,6 +125,9 @@ export interface StartTaskArgs {
   definition_of_done?: string;
   out_of_scope?: string[];
   size?: "trivial" | "standard" | "large";
+  // ── Task classification + bugfix root cause (Increment 8.5) ──
+  task_type?: TaskType;
+  root_cause?: string;
 }
 
 export interface StartTaskResult {
@@ -113,6 +138,18 @@ export interface StartTaskResult {
   message: string;
   /** When the DoR gate fires, lists the field names that were missing. */
   dor_missing_fields?: string[];
+  /** When the bugfix_root_cause gate fires. */
+  root_cause_missing?: boolean;
+}
+
+const ROOT_CAUSE_PLACEHOLDERS = new Set(["", "unknown", "unclear", "tbd", "tba", "todo", "?"]);
+
+function isPlausibleRootCause(value: string | undefined): boolean {
+  if (!value) return false;
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed.length < 10) return false; // too short to be a real cause
+  if (ROOT_CAUSE_PLACEHOLDERS.has(trimmed)) return false;
+  return true;
 }
 
 /** Default required DoR fields; project can override via standards.gates.definition_of_ready.required_fields. */
@@ -192,6 +229,26 @@ export async function startTask(
     }
   }
 
+  // ── Bugfix root-cause gate (Increment 8.5) ─────────────────────────────────
+  // When enabled AND task_type='bugfix', root_cause must be a plausible
+  // hypothesis (≥10 chars, not a placeholder like 'unknown'/'tbd').
+  const bugfixGate = standards.gates?.bugfix_root_cause?.enabled === true;
+  if (bugfixGate && args.task_type === "bugfix" && !isPlausibleRootCause(args.root_cause)) {
+    return {
+      task_id: "",
+      phase,
+      recommended_model: expected ? { model: expected.model, effort: expected.effort } : undefined,
+      blocked: true,
+      message:
+        `TASK_BUGFIX_NO_ROOT_CAUSE: task_type='bugfix' requires a plausible root_cause hypothesis ` +
+        `(≥10 chars, not 'unknown'/'unclear'/'tbd'). Bug fixes that ship before the cause is ` +
+        `identified produce a different class of mistake than ones with a wrong hypothesis. ` +
+        `State your hypothesis even if you're not certain — the verification step in ` +
+        `definition_of_done is where you confirm it.`,
+      root_cause_missing: true,
+    };
+  }
+
   const data = await load(repoRoot);
   const task: TaskRecord = {
     id: randomUUID().slice(0, 8),
@@ -211,6 +268,8 @@ export async function startTask(
     definition_of_done: args.definition_of_done,
     out_of_scope: args.out_of_scope,
     size: args.size,
+    task_type: args.task_type,
+    root_cause: args.root_cause,
   };
   if (dorEnabled && phase === "execution" && size === "trivial") {
     task.notes.push(`[${new Date().toISOString()}] DoR bypassed via size='trivial'.`);
@@ -355,6 +414,32 @@ export async function proposeChange(
     }
   }
 
+  // ── Surface-uncertainty gate (Increment 8.5) ─────────────────────────────
+  // When the project is in strict mode AND there are open (unresolved)
+  // uncertainties on the active task, block propose_change until they're
+  // resolved via surface_uncertainty({ resolve: { description, resolution } }).
+  const uncertaintyGate = standards.gates?.surface_uncertainty;
+  if (uncertaintyGate?.enabled) {
+    const open = (task.uncertainties ?? []).filter((u) => !u.resolved_at);
+    const projectName = standards.repo?.split("/").pop() ?? "";
+    const strict =
+      uncertaintyGate.default_mode === "block" ||
+      (uncertaintyGate.strict_mode_projects ?? []).includes(projectName);
+    if (strict && open.length > 0) {
+      findings.push({
+        severity: "error",
+        code: "TASK_OPEN_UNCERTAINTY",
+        message:
+          `Task ${id} has ${open.length} open uncertainty/uncertainties. ` +
+          `Categories: ${open.map((u) => u.category).join(", ")}. ` +
+          `Strict mode blocks propose_change until they're resolved.`,
+        fix:
+          `For each open item, ask the user to clarify, then call ` +
+          `surface_uncertainty({ task_id: '${id}', resolve: { description: '<the original description>', resolution: '<what was decided>' } }).`,
+      });
+    }
+  }
+
   // Legacy expected_writes check (kept for non-canary projects without the gate).
   // Suppressed when the scope-expansion gate is firing — it would double-report.
   if (!scopeGate) {
@@ -386,6 +471,113 @@ export async function proposeChange(
   }
 
   return findings;
+}
+
+// ─── surface_uncertainty ───────────────────────────────────────────────────
+
+export interface SurfaceUncertaintyArgs {
+  task_id?: string;
+  category: UncertaintyCategory;
+  description: string;
+  proposed_options?: string[];
+  /** When resolving a previously-surfaced item: pass the prior description (or omit, see resolve()). */
+  resolve?: { description: string; resolution: string };
+}
+
+export interface SurfaceUncertaintyResult {
+  task_id: string;
+  uncertainty?: SurfacedUncertainty;
+  open_count: number;
+  blocked: boolean;
+  message: string;
+}
+
+export async function surfaceUncertainty(
+  repoRoot: string,
+  args: SurfaceUncertaintyArgs,
+  standards: AgentStandards
+): Promise<SurfaceUncertaintyResult> {
+  const data = await load(repoRoot);
+  const id = args.task_id ?? data.active_task_id;
+  if (!id) {
+    return {
+      task_id: "",
+      open_count: 0,
+      blocked: true,
+      message: "No active task. Call start_task first.",
+    };
+  }
+  const task = data.tasks.find((t) => t.id === id);
+  if (!task) {
+    return {
+      task_id: id,
+      open_count: 0,
+      blocked: true,
+      message: `Task ${id} not found.`,
+    };
+  }
+
+  task.uncertainties = task.uncertainties ?? [];
+
+  // Resolve path: mark a prior uncertainty as resolved
+  if (args.resolve) {
+    const target = task.uncertainties.find(
+      (u) => u.description === args.resolve!.description && !u.resolved_at
+    );
+    if (!target) {
+      return {
+        task_id: id,
+        open_count: task.uncertainties.filter((u) => !u.resolved_at).length,
+        blocked: false,
+        message: `No open uncertainty matching '${args.resolve.description.slice(0, 60)}'.`,
+      };
+    }
+    target.resolved_at = new Date().toISOString();
+    target.resolution = args.resolve.resolution;
+    task.notes.push(
+      `[${target.resolved_at}] surface_uncertainty resolved (${target.category}): ${args.resolve.resolution}`
+    );
+    await save(repoRoot, data);
+    return {
+      task_id: id,
+      uncertainty: target,
+      open_count: task.uncertainties.filter((u) => !u.resolved_at).length,
+      blocked: false,
+      message: `Uncertainty resolved. Open count: ${task.uncertainties.filter((u) => !u.resolved_at).length}.`,
+    };
+  }
+
+  // Surface path: record a new uncertainty
+  const surfaced: SurfacedUncertainty = {
+    category: args.category,
+    description: args.description,
+    proposed_options: args.proposed_options ?? [],
+    surfaced_at: new Date().toISOString(),
+  };
+  task.uncertainties.push(surfaced);
+  task.notes.push(
+    `[${surfaced.surfaced_at}] surface_uncertainty (${surfaced.category}): ${args.description.slice(0, 120)}`
+  );
+  await save(repoRoot, data);
+
+  const openCount = task.uncertainties.filter((u) => !u.resolved_at).length;
+  const strictProjects = standards.gates?.surface_uncertainty?.strict_mode_projects ?? [];
+  const projectName = standards.repo?.split("/").pop() ?? "";
+  const strict =
+    standards.gates?.surface_uncertainty?.default_mode === "block" ||
+    strictProjects.includes(projectName);
+
+  return {
+    task_id: id,
+    uncertainty: surfaced,
+    open_count: openCount,
+    blocked: false,
+    message:
+      `Uncertainty surfaced (${surfaced.category}). Open: ${openCount}. ` +
+      (strict
+        ? "Strict mode: propose_change will block until this is resolved via surface_uncertainty({ resolve: {...} })."
+        : "Log-only mode: propose_change will continue, but findings are tracked."),
+  };
 }
 
 // ─── expand_scope ──────────────────────────────────────────────────────────

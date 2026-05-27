@@ -108,6 +108,18 @@ export interface AgentStandards {
       /** Glob patterns for auth-sensitive paths. Defaults applied in task-tracking.ts. */
       paths?: string[];
     };
+    /** Surface-uncertainty gate (Increment 8.5). */
+    surface_uncertainty?: {
+      enabled?: boolean;
+      /** "log_only" (default): records uncertainties but doesn't block. "block": propose_change blocks until resolved. */
+      default_mode?: "log_only" | "block";
+      /** Project slugs (last segment of repo) that always run in block mode regardless of default_mode. */
+      strict_mode_projects?: string[];
+    };
+    /** Bugfix root-cause gate (Increment 8.5). */
+    bugfix_root_cause?: {
+      enabled?: boolean;
+    };
   };
 }
 

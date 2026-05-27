@@ -86,6 +86,33 @@
               "description": "Glob patterns for auth-sensitive paths. Defaults to ['**/auth/**', '**/permissions/**', '**/session/**']."
             }
           }
+        },
+        "surface_uncertainty": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Surface-uncertainty gate (Increment 8.5). When enabled, the surface_uncertainty MCP tool records ambiguity / unknown deps / conflicting rules / unexpected state on the active task. In strict mode (default_mode='block' or project listed in strict_mode_projects), propose_change blocks until each uncertainty is resolved via surface_uncertainty({ resolve: {...} }).",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "default_mode": {
+              "type": "string",
+              "enum": ["log_only", "block"],
+              "default": "log_only",
+              "description": "log_only: records but doesn't block. block: propose_change halts until uncertainties are resolved."
+            },
+            "strict_mode_projects": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Project slugs that always run in block mode regardless of default_mode."
+            }
+          }
+        },
+        "bugfix_root_cause": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Bugfix root-cause gate (Increment 8.5). When enabled, start_task with task_type='bugfix' requires a plausible root_cause hypothesis (≥10 chars, not 'unknown'/'tbd').",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false }
+          }
         }
       }
     },

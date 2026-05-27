@@ -25,6 +25,7 @@ import {
   commitCheckpoint,
   expandScope,
   attachAsvsReview,
+  surfaceUncertainty,
 } from "./task-tracking.js";
 import { generateCi, type CiKind, type Language } from "./init-repo.js";
 
@@ -141,6 +142,21 @@ export function createServer(options: CreateServerOptions = {}): Server {
     definition_of_done: z.string().min(5).optional(),
     out_of_scope: z.array(z.string()).optional(),
     size: z.enum(["trivial", "standard", "large"]).optional(),
+    // ── Task classification + bugfix root cause (Increment 8.5) ──
+    task_type: z.enum(["feature", "bugfix", "architecture", "auth_change", "trivial"]).optional(),
+    root_cause: z.string().optional(),
+  });
+
+  const SurfaceUncertaintyArgsZ = z.object({
+    repo_root: RepoRoot,
+    task_id: z.string().optional(),
+    category: z.enum(["ambiguous_spec", "unknown_dependency", "conflicting_rule", "unexpected_state"]),
+    description: z.string().min(10),
+    proposed_options: z.array(z.string()).optional(),
+    resolve: z.object({
+      description: z.string().min(1),
+      resolution: z.string().min(5),
+    }).optional(),
   });
 
   const ProposeChangeArgsZ = z.object({
@@ -455,12 +471,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
         name: "start_task",
         description:
           "Record a hypothesis-first plan before doing work. Captures description, hypothesis, " +
-          "expected reads/writes, phase (planning|execution), and (when the project enables it) " +
-          "definition-of-ready fields (scope_statement, files_intended, test_approach, " +
-          "definition_of_done, out_of_scope). Returns a task_id and the recommended model. " +
+          "expected reads/writes, phase (planning|execution), task_type, and (when the project " +
+          "enables them) DoR fields (scope_statement, files_intended, test_approach, " +
+          "definition_of_done, out_of_scope) + root_cause for bugfixes. Returns a task_id and " +
+          "the recommended model. " +
           "BLOCKS if current_model is declared and doesn't match the phase's expected family. " +
-          "BLOCKS the planning→execution transition if the project has gates.definition_of_ready " +
-          "enabled and DoR fields are missing (size='trivial' bypasses but is logged). " +
+          "BLOCKS planning→execution if gates.definition_of_ready is enabled and DoR fields are " +
+          "missing (size='trivial' bypasses but is logged). " +
+          "BLOCKS task_type='bugfix' if gates.bugfix_root_cause is enabled and root_cause is " +
+          "missing or a placeholder ('unknown'/'tbd'/<10 chars). " +
           "The model check depends on the agent honestly passing current_model.",
         inputSchema: {
           type: "object",
@@ -487,6 +506,8 @@ export function createServer(options: CreateServerOptions = {}): Server {
             definition_of_done: { type: "string", description: "Observable outcome: 'test X passes', 'endpoint Y returns 200 with payload Z', etc." },
             out_of_scope: { type: "array", items: { type: "string" }, description: "Explicit list of things the agent will NOT do during this task — antidote to 'while I'm here' refactors." },
             size: { type: "string", enum: ["trivial", "standard", "large"], default: "standard", description: "size='trivial' skips the definition_of_ready gate but is logged." },
+            task_type: { type: "string", enum: ["feature", "bugfix", "architecture", "auth_change", "trivial"], description: "Task classification. 'bugfix' requires root_cause when bugfix_root_cause gate is enabled." },
+            root_cause: { type: "string", description: "For task_type='bugfix': your hypothesis about why the bug occurs. Must be ≥10 chars and not a placeholder ('unknown'/'tbd' rejected). State a hypothesis even if uncertain — verification happens in definition_of_done." },
           },
         },
       },
@@ -575,6 +596,45 @@ export function createServer(options: CreateServerOptions = {}): Server {
             },
             verification: { type: "string", description: "What was checked, and how. ≥10 chars." },
             reviewer: { type: "string", description: "Who or what reviewed — agent name, person, or automated tool." },
+          },
+        },
+      },
+      {
+        name: "surface_uncertainty",
+        description:
+          "Record (or resolve) an uncertainty encountered during a task — ambiguous spec, unknown " +
+          "dependency, conflicting rule, unexpected state. Records persist on the active task. In " +
+          "strict mode (gates.surface_uncertainty.default_mode='block' or the project listed in " +
+          "strict_mode_projects), propose_change blocks until each uncertainty is resolved. To " +
+          "resolve, call again with resolve: { description: '<the original description>', " +
+          "resolution: '<what was decided>' }. Required by the grill-me skill when an interview " +
+          "question can't be resolved by user clarification or codebase reading.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? ["category", "description"] : ["repo_root", "category", "description"],
+          properties: {
+            repo_root: repoRootProp,
+            task_id: { type: "string", description: "Defaults to the active task." },
+            category: {
+              type: "string",
+              enum: ["ambiguous_spec", "unknown_dependency", "conflicting_rule", "unexpected_state"],
+              description: "Category of uncertainty.",
+            },
+            description: { type: "string", description: "What's unclear. ≥10 chars." },
+            proposed_options: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional list of resolutions to choose from.",
+            },
+            resolve: {
+              type: "object",
+              description: "Pass to resolve a previously-surfaced uncertainty rather than create a new one. The 'category' and 'description' top-level fields still need to be present (zod requires them) but are ignored when 'resolve' is set.",
+              required: ["description", "resolution"],
+              properties: {
+                description: { type: "string", description: "Description of the prior surfaced uncertainty (used to match)." },
+                resolution: { type: "string", description: "What was decided. ≥5 chars." },
+              },
+            },
           },
         },
       },
@@ -850,6 +910,16 @@ export function createServer(options: CreateServerOptions = {}): Server {
       if (req.params.name === "attach_asvs_review") {
         const args = AttachAsvsReviewArgsZ.parse(req.params.arguments ?? {});
         const result = await attachAsvsReview(args.repo_root, args);
+        return {
+          isError: result.blocked,
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      if (req.params.name === "surface_uncertainty") {
+        const args = SurfaceUncertaintyArgsZ.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const result = await surfaceUncertainty(args.repo_root, args, standards);
         return {
           isError: result.blocked,
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
