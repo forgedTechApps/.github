@@ -291,18 +291,46 @@ export async function proposeChange(
     });
   }
 
-  // For each proposed path, check if it's within expected_writes (glob match).
-  for (const path of args.paths) {
-    const matches = task.expected_writes.some((pat) => minimatch(path, pat));
-    if (!matches) {
-      findings.push({
-        severity: mode === "hard" ? "error" : "warn",
-        code: "TASK_OUT_OF_SCOPE_WRITE",
-        message: `Proposed write '${path}' is not in task ${id}'s expected_writes ${JSON.stringify(task.expected_writes)}.`,
-        fix: mode === "hard"
-          ? "Either update the task scope (note + re-state expected_writes) or revisit whether this change belongs in a different task."
-          : "Document why scope is widening (the agent should append a note via commit_checkpoint).",
-      });
+  // ── Scope-expansion gate (Increment 3) ───────────────────────────────────
+  // When enabled + the active task has files_intended (from DoR), block any
+  // proposed path that doesn't match. Stronger than TASK_OUT_OF_SCOPE_WRITE:
+  // always errors, regardless of investigation.mode, and instructs the agent
+  // to call expand_scope to unblock.
+  const scopeGate = standards.gates?.scope_expansion?.enabled === true;
+  const filesIntended = task.files_intended ?? [];
+  if (scopeGate && filesIntended.length > 0) {
+    for (const path of args.paths) {
+      const matches = filesIntended.some((pat) => minimatch(path, pat));
+      if (!matches) {
+        findings.push({
+          severity: "error",
+          code: "TASK_SCOPE_EXPANSION",
+          message:
+            `Proposed write '${path}' is not in task ${id}'s files_intended ${JSON.stringify(filesIntended)}. ` +
+            `Scope-expansion gate blocks this write.`,
+          fix:
+            `Call expand_scope({ task_id: '${id}', path: '${path}', reason: '<why>', user_confirmed: true }) ` +
+            `after explicitly asking the user. If they decline, revert and complete the original scope first.`,
+        });
+      }
+    }
+  }
+
+  // Legacy expected_writes check (kept for non-canary projects without the gate).
+  // Suppressed when the scope-expansion gate is firing — it would double-report.
+  if (!scopeGate) {
+    for (const path of args.paths) {
+      const matches = task.expected_writes.some((pat) => minimatch(path, pat));
+      if (!matches) {
+        findings.push({
+          severity: mode === "hard" ? "error" : "warn",
+          code: "TASK_OUT_OF_SCOPE_WRITE",
+          message: `Proposed write '${path}' is not in task ${id}'s expected_writes ${JSON.stringify(task.expected_writes)}.`,
+          fix: mode === "hard"
+            ? "Either update the task scope (note + re-state expected_writes) or revisit whether this change belongs in a different task."
+            : "Document why scope is widening (the agent should append a note via commit_checkpoint).",
+        });
+      }
     }
   }
 
@@ -319,6 +347,79 @@ export async function proposeChange(
   }
 
   return findings;
+}
+
+// ─── expand_scope ──────────────────────────────────────────────────────────
+
+export interface ExpandScopeArgs {
+  task_id?: string;
+  /** Path or glob to add to the active task's files_intended. */
+  path: string;
+  /** Why the original plan didn't cover this file. */
+  reason: string;
+  /**
+   * The user has explicitly approved adding this path. The MCP server can't
+   * actually see user confirmation — this is agent-declared and logged.
+   * Without it, expand_scope refuses; with it, the agent is asserting "I asked,
+   * the user said yes".
+   */
+  user_confirmed: boolean;
+}
+
+export interface ExpandScopeResult {
+  task_id: string;
+  files_intended: string[];
+  blocked: boolean;
+  message: string;
+}
+
+export async function expandScope(
+  repoRoot: string,
+  args: ExpandScopeArgs
+): Promise<ExpandScopeResult> {
+  const data = await load(repoRoot);
+  const id = args.task_id ?? data.active_task_id;
+  if (!id) {
+    return {
+      task_id: "",
+      files_intended: [],
+      blocked: true,
+      message: "No active task. Call start_task first.",
+    };
+  }
+  const task = data.tasks.find((t) => t.id === id);
+  if (!task) {
+    return {
+      task_id: id,
+      files_intended: [],
+      blocked: true,
+      message: `Task ${id} not found.`,
+    };
+  }
+  if (!args.user_confirmed) {
+    return {
+      task_id: id,
+      files_intended: task.files_intended ?? [],
+      blocked: true,
+      message:
+        "expand_scope requires user_confirmed=true. The scope-expansion gate exists " +
+        "to make scope creep deliberate — ask the user before declaring confirmation. " +
+        "If they decline, revert and complete the original scope first.",
+    };
+  }
+
+  task.files_intended = [...(task.files_intended ?? []), args.path];
+  task.notes.push(
+    `[${new Date().toISOString()}] expand_scope: added '${args.path}' — ${args.reason} (user_confirmed=true)`
+  );
+  await save(repoRoot, data);
+
+  return {
+    task_id: id,
+    files_intended: task.files_intended,
+    blocked: false,
+    message: `Added '${args.path}' to task ${id}'s files_intended.`,
+  };
 }
 
 // ─── commit_checkpoint ─────────────────────────────────────────────────────

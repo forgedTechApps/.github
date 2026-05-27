@@ -98,6 +98,9 @@ export interface AgentStandards {
       /** Optional override of the required field list. Defaults applied in task-tracking.ts. */
       required_fields?: Array<"scope_statement" | "files_intended" | "test_approach" | "definition_of_done" | "out_of_scope">;
     };
+    scope_expansion?: {
+      enabled?: boolean;
+    };
   };
 }
 

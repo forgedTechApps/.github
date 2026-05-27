@@ -65,6 +65,14 @@
               "description": "Override default required fields. Defaults to all five if omitted."
             }
           }
+        },
+        "scope_expansion": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Scope-expansion gate (Increment 3). When enabled, propose_change blocks paths not matching the active task's files_intended. The agent must call expand_scope (with user confirmation) to add the path before retrying. Depends on definition_of_ready producing files_intended.",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false }
+          }
         }
       }
     },
