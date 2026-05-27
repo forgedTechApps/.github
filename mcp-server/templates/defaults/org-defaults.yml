@@ -173,21 +173,20 @@ architecture:
     - rule: "External HTTP calls must set explicit timeouts and have a documented failure mode (retry, circuit-break, fallback). No bare unbounded fetch()."
       tier: invariant
       id: external_http_has_timeout
-      check_command: "scripts/check-http-timeouts.sh"
-      severity: error
-      deferred:
-        owner: "Carlos"
-        target: "W13"
-        issue: "https://github.com/forgedTechApps/.github/issues/6"
+      check_command: "mcp:check_http_timeouts"
+      severity: warn
+      # severity stays at 'warn' during the per-project cleanup-pass window.
+      # Promote to 'error' after each project cleans up. Bypass via inline
+      # '// agent-standards: allow-no-timeout <reason>'.
 
     - rule: "Logging never includes PII, credentials, tokens, or full request bodies. Mask or omit at the logger, not the call site."
-      tier: practice
+      tier: invariant
       id: no_pii_in_logs
-      deferred:
-        owner: "Carlos"
-        target: "W13"
-        reason: "Will promote to Invariant when log-format pre-commit ships."
-        issue: "https://github.com/forgedTechApps/.github/issues/5"
+      check_command: "mcp:check_log_pii"
+      severity: warn
+      # severity stays at 'warn' during the per-project cleanup-pass window.
+      # Promote to 'error' after each project cleans up. Bypass via inline
+      # '// agent-standards: allow-log-field <reason>'.
 
     # ── Secrets & config ───────────────────────────────────────────────────
     - rule: "Secrets via environment variables or a secret store ONLY. Never in committed files (.env, source, config). Pre-commit / CI scans must reject."
@@ -208,23 +207,19 @@ architecture:
     - rule: "Service-role keys / admin tokens never flow to clients. Server-only."
       tier: invariant
       id: service_role_keys_not_in_client
-      check_command: "scripts/check-client-bundle-secrets.sh"
+      check_command: "mcp:check_client_bundle_secrets"
       severity: error
-      deferred:
-        owner: "Carlos"
-        target: "W12"
-        issue: "https://github.com/forgedTechApps/.github/issues/3"
+      # Run after `pnpm build` / `next build` etc — scans compiled output, not source.
 
     # ── Data integrity ─────────────────────────────────────────────────────
     - rule: "SQL: parameterised queries only. String concatenation in queries is rejected."
       tier: invariant
       id: parameterised_queries_only
-      check_command: "ci:semgrep-sqli"
+      check_command: "mcp:check_sql_injection"
       severity: error
-      deferred:
-        owner: "Carlos"
-        target: "W12"
-        issue: "https://github.com/forgedTechApps/.github/issues/4"
+      # Regex catches the 80% case (template literals + SQL concat). Deeper
+      # scanning (CodeQL, Semgrep) belongs in CI. Bypass: '// agent-standards:
+      # allow-sql-concat <reason>'.
 
     - rule: "Schema migrations are forward-only and reversible (or document why not). Destructive migrations (DROP, NOT NULL on existing) require explicit user approval."
       tier: practice

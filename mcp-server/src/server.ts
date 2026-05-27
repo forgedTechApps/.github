@@ -12,6 +12,10 @@ import { checkSecrets } from "./check-secrets.js";
 import { checkDesignConsistency } from "./check-design-consistency.js";
 import { checkCodebaseHygiene } from "./check-codebase-hygiene.js";
 import { checkTenantIsolation } from "./check-tenant-isolation.js";
+import { checkClientBundleSecrets } from "./check-client-bundle-secrets.js";
+import { checkSqlInjection } from "./check-sql-injection.js";
+import { checkLogPii } from "./check-log-pii.js";
+import { checkHttpTimeouts } from "./check-http-timeouts.js";
 import { proposeRule } from "./propose-rule.js";
 import { appendDrift, getDriftLog } from "./drift-log.js";
 import {
@@ -92,10 +96,14 @@ export function createServer(options: CreateServerOptions = {}): Server {
   });
 
   const CheckTenantIsolationArgs = z.object({ repo_root: RepoRoot });
+  const CheckClientBundleSecretsArgs = z.object({ repo_root: RepoRoot });
+  const CheckSqlInjectionArgs = z.object({ repo_root: RepoRoot });
+  const CheckLogPiiArgs = z.object({ repo_root: RepoRoot });
+  const CheckHttpTimeoutsArgs = z.object({ repo_root: RepoRoot });
 
   const RunLocalChecksArgs = z.object({
     repo_root: RepoRoot,
-    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant"])).optional(),
+    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts"])).optional(),
     secrets_scope: z.enum(["staged", "tracked", "all"]).default("staged"),
   });
 
@@ -298,7 +306,67 @@ export function createServer(options: CreateServerOptions = {}): Server {
           "data_layer_paths accepts tenant_id_field (e.g. 'householdId') as a parameter. Bypass via " +
           "inline comment '// tenant-isolation: bypass <reason>' (on the line above the signature or " +
           "trailing). File-level bypass: top-of-file comment with the same pattern. Project-level " +
-          "exempt_methods allowlist for repeated patterns. TypeScript/JavaScript only for now.",
+          "exempt_methods allowlist for repeated patterns. TypeScript/JavaScript + Python.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "check_client_bundle_secrets",
+        description:
+          "Service-role / admin-token leak check (Increment 10.1). Scans compiled client bundles " +
+          "(apps/web/.next, apps/mobile/build, dist, build, .output, .svelte-kit, out) for: (1) known " +
+          "service-role key prefixes (sb_secret_, sk_live_, AKIA*, ghp_, etc.); (2) string-literal " +
+          "references to env vars whose names match server-only patterns (SERVICE_ROLE, *_SECRET, " +
+          "ADMIN_*, PRIVATE_KEY) found in .env.example. Per-project override via " +
+          "architecture.client_bundle_paths. Run after build, not on raw source.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "check_sql_injection",
+        description:
+          "SQL injection / string-concat-query check (Increment 10.2). Conservative regex pass — " +
+          "catches the 80% case: template literals with SQL keyword + interpolation, string " +
+          "concatenation with SQL keywords nearby, Python f-strings / %-formatting with SQL " +
+          "keywords. False positives suppressed via inline '// agent-standards: allow-sql-concat " +
+          "<reason>'. Deeper scanning (CodeQL, Semgrep) belongs in CI; this is a fast local gate.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "check_log_pii",
+        description:
+          "Log-PII check (Increment 10.3). Scans logger / console / print lines for references to " +
+          "sensitive field names: password, secret, token, apiKey, sessionId, email, ssn, " +
+          "accountNumber, creditCard, pin, dob, phone, jwt, refresh_token, etc. Ships at severity: " +
+          "warn — promote to error per project after cleanup. Override default field list via " +
+          "architecture.log_pii_extra_fields. Inline bypass: '// agent-standards: allow-log-field " +
+          "<reason>'.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "check_http_timeouts",
+        description:
+          "External HTTP timeout check (Increment 10.4). Catches the unbounded-fetch reliability " +
+          "footgun. Flags fetch(), axios(), axios.{get,post,...}(), http.{get,request}(), got(), ky(), " +
+          "requests.{get,post,...}(), httpx.{get,post,...}(), urlopen() calls whose argument list " +
+          "doesn't contain a timeout-shaped option (timeout, signal, AbortSignal, timeoutMs, " +
+          "request_timeout, read_timeout, connect_timeout). Multi-line arg lists supported via " +
+          "balanced-paren extraction. Ships at severity: warn. Inline bypass: " +
+          "'// agent-standards: allow-no-timeout <reason>'.",
         inputSchema: {
           type: "object",
           required: defaultRepoRoot ? [] : ["repo_root"],
@@ -308,7 +376,8 @@ export function createServer(options: CreateServerOptions = {}): Server {
       {
         name: "run_local_checks",
         description:
-          "One-call aggregator for the standard local checks: ci_setup, branching, secrets, design, hygiene, tenant. " +
+          "One-call aggregator for the standard local checks: ci_setup, branching, secrets, design, hygiene, " +
+          "tenant, bundle (client-bundle secret leak), sqli (string-concat SQL), log_pii, http_timeouts. " +
           "Use this before committing — closes the gap of having to call each tool individually. " +
           "Findings are appended to the drift log; query trends with get_drift_log.",
         inputSchema: {
@@ -318,8 +387,8 @@ export function createServer(options: CreateServerOptions = {}): Server {
             repo_root: repoRootProp,
             include: {
               type: "array",
-              items: { type: "string", enum: ["ci", "branching", "secrets", "design", "hygiene", "tenant"] },
-              description: "Subset of checks to run. Default: all six.",
+              items: { type: "string", enum: ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts"] },
+              description: "Subset of checks to run. Default: all ten.",
             },
             secrets_scope: { type: "string", enum: ["staged", "tracked", "all"], default: "staged" },
           },
@@ -606,9 +675,43 @@ export function createServer(options: CreateServerOptions = {}): Server {
         return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
       }
 
+      if (req.params.name === "check_client_bundle_secrets") {
+        const args = CheckClientBundleSecretsArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkClientBundleSecrets(args.repo_root, standards);
+        await appendDrift(args.repo_root, "check_client_bundle_secrets", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "check_sql_injection") {
+        const args = CheckSqlInjectionArgs.parse(req.params.arguments ?? {});
+        const findings = await checkSqlInjection(args.repo_root);
+        await appendDrift(args.repo_root, "check_sql_injection", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "check_log_pii") {
+        const args = CheckLogPiiArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkLogPii(args.repo_root, standards);
+        await appendDrift(args.repo_root, "check_log_pii", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "check_http_timeouts") {
+        const args = CheckHttpTimeoutsArgs.parse(req.params.arguments ?? {});
+        const findings = await checkHttpTimeouts(args.repo_root);
+        await appendDrift(args.repo_root, "check_http_timeouts", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
       if (req.params.name === "run_local_checks") {
         const args = RunLocalChecksArgs.parse(req.params.arguments ?? {});
-        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant"]);
+        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts"]);
         const standards = await loadStandards(args.repo_root);
         const sections: Array<{ source: string; findings: import("./check-ci.js").Finding[] }> = [];
         if (include.has("ci")) {
@@ -640,6 +743,26 @@ export function createServer(options: CreateServerOptions = {}): Server {
           const f = await checkTenantIsolation(args.repo_root, standards);
           sections.push({ source: "check_tenant_isolation", findings: f });
           await appendDrift(args.repo_root, "check_tenant_isolation", f);
+        }
+        if (include.has("bundle")) {
+          const f = await checkClientBundleSecrets(args.repo_root, standards);
+          sections.push({ source: "check_client_bundle_secrets", findings: f });
+          await appendDrift(args.repo_root, "check_client_bundle_secrets", f);
+        }
+        if (include.has("sqli")) {
+          const f = await checkSqlInjection(args.repo_root);
+          sections.push({ source: "check_sql_injection", findings: f });
+          await appendDrift(args.repo_root, "check_sql_injection", f);
+        }
+        if (include.has("log_pii")) {
+          const f = await checkLogPii(args.repo_root, standards);
+          sections.push({ source: "check_log_pii", findings: f });
+          await appendDrift(args.repo_root, "check_log_pii", f);
+        }
+        if (include.has("http_timeouts")) {
+          const f = await checkHttpTimeouts(args.repo_root);
+          sections.push({ source: "check_http_timeouts", findings: f });
+          await appendDrift(args.repo_root, "check_http_timeouts", f);
         }
         const isError = sections.some((s) => s.findings.some((f) => f.severity === "error"));
         return { isError, content: [{ type: "text", text: JSON.stringify(sections, null, 2) }] };
