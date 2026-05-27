@@ -44,6 +44,31 @@
         }
       }
     },
+
+    "gates": {
+      "type": "object",
+      "description": "Project-level workflow gate toggles. Canary projects opt in here before org-wide rollout.",
+      "additionalProperties": false,
+      "properties": {
+        "definition_of_ready": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Definition-of-ready gate (Increment 2). When enabled, start_task with phase='execution' requires scope_statement, files_intended, test_approach, definition_of_done, and out_of_scope. size='trivial' bypasses but is logged.",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "required_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["scope_statement", "files_intended", "test_approach", "definition_of_done", "out_of_scope"]
+              },
+              "description": "Override default required fields. Defaults to all five if omitted."
+            }
+          }
+        }
+      }
+    },
+
     "stack": {
       "type": "object",
       "description": "Concrete tooling. Helps the agent pick the right commands.",
