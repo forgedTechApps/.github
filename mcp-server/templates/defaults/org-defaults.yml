@@ -125,12 +125,8 @@ style_ui:
   - rule: "A view file > 200 lines is a smell — extract subviews."
     tier: invariant
     id: view_size_limit
-    check_command: "scripts/check-view-size.sh"
+    check_command: "mcp:check_view_size"
     severity: warn
-    deferred:
-      owner: "Carlos"
-      target: "Beyond W15"
-      reason: "Not on critical path; promote when metrics justify."
 
   - rule: "Design tokens (colors, spacing, typography, radii) come from a single source — never hardcode hex values, magic spacing numbers, or font sizes inside a component."
     tier: invariant
@@ -207,11 +203,8 @@ architecture:
     - rule: "All deployable services declare a complete .env.example documenting every required variable — no surprise config in production."
       tier: invariant
       id: env_example_present
-      check_command: "scripts/check-env-example.sh"
+      check_command: "mcp:check_env_example"
       severity: error
-      deferred:
-        owner: "Carlos"
-        target: "Beyond W15"
 
     - rule: "Service-role keys / admin tokens never flow to clients. Server-only."
       tier: invariant
@@ -235,32 +228,30 @@ architecture:
       id: migrations_forward_only
 
     - rule: "Database access goes through a repository / data-access layer — UI / route handlers never touch the DB driver directly."
-      tier: invariant
+      tier: practice
       id: db_access_via_dal
-      check_command: "scripts/check-dal-only.sh"
-      severity: error
-      deferred:
-        owner: "Carlos"
-        target: "Beyond W15"
+      # Demoted from Invariant: a generic AST check across heterogeneous ORMs
+      # (Drizzle / Prisma / SQLAlchemy / Django ORM / raw SQL) is impractical.
+      # Cross-tenant integration test (cross_tenant_test_coverage) catches the
+      # downstream effect when DB access bypasses the layer.
 
     # ── HTTP services ──────────────────────────────────────────────────────
     - rule: "HTTP services set security headers: Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options: nosniff, X-Frame-Options: DENY (or frame-ancestors), Referrer-Policy: strict-origin-when-cross-origin."
       tier: invariant
       id: http_security_headers
-      check_command: "scripts/check-security-headers.sh"
-      severity: error
-      deferred:
-        owner: "Carlos"
-        target: "Beyond W15"
+      check_command: "mcp:check_http_security"
+      severity: warn
+      # Combined with cors_explicit_origins in mcp:check_http_security. Passes
+      # automatically when a known headers library (helmet, fastify-helmet,
+      # django.middleware.security) is detected.
 
     - rule: "CORS allowlist is explicit per-origin. No `*` for endpoints that handle credentials."
       tier: invariant
       id: cors_explicit_origins
-      check_command: "scripts/check-cors-config.sh"
+      check_command: "mcp:check_http_security"
       severity: error
-      deferred:
-        owner: "Carlos"
-        target: "Beyond W15"
+      # Same check as http_security_headers — wildcard+credentials is the
+      # dangerous combo flagged at severity: error.
 
     - rule: "Rate-limit every public endpoint. Document the limit; surface 429 with Retry-After."
       tier: practice
