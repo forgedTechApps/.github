@@ -11,6 +11,7 @@ import { checkBranching } from "./check-branching.js";
 import { checkSecrets } from "./check-secrets.js";
 import { checkDesignConsistency } from "./check-design-consistency.js";
 import { checkCodebaseHygiene } from "./check-codebase-hygiene.js";
+import { checkTenantIsolation } from "./check-tenant-isolation.js";
 import { proposeRule } from "./propose-rule.js";
 import { appendDrift, getDriftLog } from "./drift-log.js";
 import {
@@ -90,9 +91,11 @@ export function createServer(options: CreateServerOptions = {}): Server {
     severity: z.enum(["warn", "error"]).optional(),
   });
 
+  const CheckTenantIsolationArgs = z.object({ repo_root: RepoRoot });
+
   const RunLocalChecksArgs = z.object({
     repo_root: RepoRoot,
-    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene"])).optional(),
+    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant"])).optional(),
     secrets_scope: z.enum(["staged", "tracked", "all"]).default("staged"),
   });
 
@@ -288,9 +291,24 @@ export function createServer(options: CreateServerOptions = {}): Server {
         },
       },
       {
+        name: "check_tenant_isolation",
+        description:
+          "Multi-tenant query isolation invariant (Increment 7). For projects with " +
+          "architecture.tenant_isolation configured, verifies every method/function in the configured " +
+          "data_layer_paths accepts tenant_id_field (e.g. 'householdId') as a parameter. Bypass via " +
+          "inline comment '// tenant-isolation: bypass <reason>' (on the line above the signature or " +
+          "trailing). File-level bypass: top-of-file comment with the same pattern. Project-level " +
+          "exempt_methods allowlist for repeated patterns. TypeScript/JavaScript only for now.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
         name: "run_local_checks",
         description:
-          "One-call aggregator for the standard local checks: ci_setup, branching, secrets, design, hygiene. " +
+          "One-call aggregator for the standard local checks: ci_setup, branching, secrets, design, hygiene, tenant. " +
           "Use this before committing — closes the gap of having to call each tool individually. " +
           "Findings are appended to the drift log; query trends with get_drift_log.",
         inputSchema: {
@@ -300,8 +318,8 @@ export function createServer(options: CreateServerOptions = {}): Server {
             repo_root: repoRootProp,
             include: {
               type: "array",
-              items: { type: "string", enum: ["ci", "branching", "secrets", "design", "hygiene"] },
-              description: "Subset of checks to run. Default: all five.",
+              items: { type: "string", enum: ["ci", "branching", "secrets", "design", "hygiene", "tenant"] },
+              description: "Subset of checks to run. Default: all six.",
             },
             secrets_scope: { type: "string", enum: ["staged", "tracked", "all"], default: "staged" },
           },
@@ -579,9 +597,18 @@ export function createServer(options: CreateServerOptions = {}): Server {
         return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
       }
 
+      if (req.params.name === "check_tenant_isolation") {
+        const args = CheckTenantIsolationArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkTenantIsolation(args.repo_root, standards);
+        await appendDrift(args.repo_root, "check_tenant_isolation", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
       if (req.params.name === "run_local_checks") {
         const args = RunLocalChecksArgs.parse(req.params.arguments ?? {});
-        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene"]);
+        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant"]);
         const standards = await loadStandards(args.repo_root);
         const sections: Array<{ source: string; findings: import("./check-ci.js").Finding[] }> = [];
         if (include.has("ci")) {
@@ -608,6 +635,11 @@ export function createServer(options: CreateServerOptions = {}): Server {
           const f = await checkCodebaseHygiene(args.repo_root);
           sections.push({ source: "check_codebase_hygiene", findings: f });
           await appendDrift(args.repo_root, "check_codebase_hygiene", f);
+        }
+        if (include.has("tenant")) {
+          const f = await checkTenantIsolation(args.repo_root, standards);
+          sections.push({ source: "check_tenant_isolation", findings: f });
+          await appendDrift(args.repo_root, "check_tenant_isolation", f);
         }
         const isError = sections.some((s) => s.findings.some((f) => f.severity === "error"));
         return { isError, content: [{ type: "text", text: JSON.stringify(sections, null, 2) }] };
