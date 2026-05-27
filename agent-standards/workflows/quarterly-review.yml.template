@@ -1,0 +1,108 @@
+# forgedTechApps quarterly-review workflow template
+#
+# Copy this into the project's .github/workflows/agent-standards-quarterly-review.yml.
+# Runs every 90 days and opens an issue with the rule-metrics report.
+#
+# The issue IS the agenda — skipping the meeting doesn't skip the artifact.
+# Per agent-standards/REVIEW.md.
+
+name: agent-standards quarterly review
+
+on:
+  schedule:
+    # Quarterly at 09:00 UTC on the 1st of Mar / Jun / Sep / Dec
+    - cron: '0 9 1 3,6,9,12 *'
+  workflow_dispatch: # allow manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install agent-standards MCP server
+        run: |
+          # Adjust path / install command for the project's setup.
+          # If the MCP server is published, `npm install -g @forgedtech/agent-standards-mcp`.
+          # If checked out as a sibling, replace the next line accordingly.
+          npm install -g @forgedtech/agent-standards-mcp || echo "MCP install: see comment"
+
+      - name: Generate rule-metrics report
+        id: metrics
+        run: |
+          # Invoke get_rule_metrics directly via node (the tool is a function).
+          # Replace <path-to-mcp-server> with the actual install location.
+          cat <<'NODE' > /tmp/report.mjs
+          import { getRuleMetrics } from "@forgedtech/agent-standards-mcp/dist/rule-metrics.js";
+          const repoRoot = process.cwd();
+          const result = await getRuleMetrics(repoRoot, { window_days: 90 });
+          const lines = [];
+          lines.push(`## agent-standards quarterly review`);
+          lines.push(``);
+          lines.push(`**Window:** ${result.window_days} days. **Total drift entries:** ${result.total_entries}.`);
+          lines.push(``);
+          lines.push(`### Rules with events`);
+          if (result.rules_with_events.length === 0) {
+            lines.push(`_None._ Either the drift log is empty or no rule fired in the window.`);
+          } else {
+            lines.push(`| Rule | Tier | Count | Errors | Warns | Sources | Latest |`);
+            lines.push(`|---|---|---|---|---|---|---|`);
+            for (const m of result.rules_with_events) {
+              lines.push(`| \`${m.rule_id}\` | ${m.tier} | ${m.count} | ${m.by_severity.error} | ${m.by_severity.warn} | ${m.sources.join(", ")} | ${m.latest.split("T")[0]} |`);
+            }
+          }
+          lines.push(``);
+          lines.push(`### Rules with zero events`);
+          if (result.rules_with_zero_events.length === 0) {
+            lines.push(`_None._`);
+          } else {
+            lines.push(`Candidates for demotion / deletion. See agent-standards/REVIEW.md decision matrix.`);
+            lines.push(``);
+            for (const z of result.rules_with_zero_events) {
+              lines.push(`- \`${z.rule_id}\` (${z.tier})`);
+            }
+          }
+          if (result.unmapped_codes.length > 0) {
+            lines.push(``);
+            lines.push(`### Unmapped drift codes`);
+            lines.push(`These codes don't map to a rule. Add to CODE_TO_RULE_ID in rule-metrics.ts.`);
+            lines.push(``);
+            for (const u of result.unmapped_codes) lines.push(`- \`${u.code}\` (${u.count}×)`);
+          }
+          lines.push(``);
+          lines.push(`---`);
+          lines.push(``);
+          lines.push(`### Action items`);
+          lines.push(``);
+          lines.push(`Apply the decision matrix from agent-standards/REVIEW.md, then append decisions to \`.agent-standards-decisions.md\`.`);
+          lines.push(``);
+          lines.push(`<!-- This issue was opened by the agent-standards quarterly-review workflow. -->`);
+          console.log(lines.join("\n"));
+          NODE
+          REPORT="$(node /tmp/report.mjs)"
+          echo "report<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$REPORT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Open quarterly review issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `${{ steps.metrics.outputs.report }}`;
+            const today = new Date().toISOString().split("T")[0];
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `agent-standards quarterly review — ${today}`,
+              body,
+              labels: ["agent-standards", "review"],
+            });

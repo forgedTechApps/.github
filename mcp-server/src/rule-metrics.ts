@@ -31,6 +31,12 @@ const CODE_TO_RULE_ID: Record<string, string> = {
   NO_UNTRACKED_TODOS: "no_untracked_todos",
   // check_tenant_isolation (Increments 7-8)
   TENANT_ISOLATION_MISSING: "multi_tenant_query_isolation",
+  // check_cross_tenant_test (Beyond-W15 / W17-18)
+  CROSS_TENANT_TEST_MISSING: "cross_tenant_test_coverage",
+  CROSS_TENANT_TEST_EMPTY: "cross_tenant_test_coverage",
+  CROSS_TENANT_TEST_UNDER_COVERAGE: "cross_tenant_test_coverage",
+  CROSS_TENANT_TEST_NOT_DESIGNATED: "cross_tenant_test_coverage",
+  CROSS_TENANT_TEST_UNREADABLE: "cross_tenant_test_coverage",
   // check_client_bundle_secrets (Increment 10.1)
   BUNDLE_SECRET_LEAK: "service_role_keys_not_in_client",
   // check_sql_injection (Increment 10.2)

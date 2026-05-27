@@ -170,6 +170,15 @@ architecture:
       # No-op when architecture.tenant_isolation is unset. Active when configured.
       # Bypass via inline '// tenant-isolation: bypass <reason>' comment per method.
 
+    - rule: "Multi-tenant projects: a designated cross-tenant integration test asserts 403 for every authenticated route when called with a foreign tenant ID. The test row count keeps pace with new routes."
+      tier: invariant
+      id: cross_tenant_test_coverage
+      check_command: "mcp:check_cross_tenant_test"
+      severity: warn
+      # Active when architecture.tenant_isolation.cross_tenant_test_file is set.
+      # The mechanical proxy for OWASP A01 — generic AST check for resource-level
+      # authorisation is impractical, so we verify the test inventory grows.
+
     - rule: "External HTTP calls must set explicit timeouts and have a documented failure mode (retry, circuit-break, fallback). No bare unbounded fetch()."
       tier: invariant
       id: external_http_has_timeout

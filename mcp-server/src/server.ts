@@ -12,6 +12,7 @@ import { checkSecrets } from "./check-secrets.js";
 import { checkDesignConsistency } from "./check-design-consistency.js";
 import { checkCodebaseHygiene } from "./check-codebase-hygiene.js";
 import { checkTenantIsolation } from "./check-tenant-isolation.js";
+import { checkCrossTenantTest } from "./check-cross-tenant-test.js";
 import { checkClientBundleSecrets } from "./check-client-bundle-secrets.js";
 import { checkSqlInjection } from "./check-sql-injection.js";
 import { checkLogPii } from "./check-log-pii.js";
@@ -98,6 +99,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
   });
 
   const CheckTenantIsolationArgs = z.object({ repo_root: RepoRoot });
+  const CheckCrossTenantTestArgs = z.object({ repo_root: RepoRoot });
   const CheckClientBundleSecretsArgs = z.object({ repo_root: RepoRoot });
   const CheckSqlInjectionArgs = z.object({ repo_root: RepoRoot });
   const CheckLogPiiArgs = z.object({ repo_root: RepoRoot });
@@ -111,7 +113,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
   const RunLocalChecksArgs = z.object({
     repo_root: RepoRoot,
-    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts"])).optional(),
+    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test"])).optional(),
     secrets_scope: z.enum(["staged", "tracked", "all"]).default("staged"),
   });
 
@@ -145,6 +147,8 @@ export function createServer(options: CreateServerOptions = {}): Server {
     // ── Task classification + bugfix root cause (Increment 8.5) ──
     task_type: z.enum(["feature", "bugfix", "architecture", "auth_change", "trivial"]).optional(),
     root_cause: z.string().optional(),
+    // ── Reversibility (Beyond-W15, W19) ──
+    reversibility: z.enum(["easy", "moderate", "hard"]).optional(),
   });
 
   const SurfaceUncertaintyArgsZ = z.object({
@@ -337,6 +341,25 @@ export function createServer(options: CreateServerOptions = {}): Server {
         },
       },
       {
+        name: "check_cross_tenant_test",
+        description:
+          "Cross-tenant integration test invariant (Beyond-W15 / W17-18). Generic AST check for " +
+          "'authorisation at the resource level' is impractical (auth patterns vary by domain). " +
+          "The mechanical proxy: every authenticated route should have an integration-test assertion " +
+          "that returns 403 when called with a foreign tenant ID. " +
+          "For projects with architecture.tenant_isolation.cross_tenant_test_file set, this check " +
+          "verifies the file exists and that its 403-assertion count is within 80% of the detected " +
+          "authenticated-route count. 20% slack acknowledges that one assertion can cover multiple " +
+          "routes via parameterisation. Heuristic patterns for routes (Express/Fastify/FastAPI) and " +
+          "for 403 assertions (Jest/Vitest/pytest). Route file globs default to '**/routes/**' + " +
+          "'**/router.py' + '**/*.routes.ts' — override via architecture.tenant_isolation.route_files.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
         name: "check_client_bundle_secrets",
         description:
           "Service-role / admin-token leak check (Increment 10.1). Scans compiled client bundles " +
@@ -508,6 +531,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
             size: { type: "string", enum: ["trivial", "standard", "large"], default: "standard", description: "size='trivial' skips the definition_of_ready gate but is logged." },
             task_type: { type: "string", enum: ["feature", "bugfix", "architecture", "auth_change", "trivial"], description: "Task classification. 'bugfix' requires root_cause when bugfix_root_cause gate is enabled." },
             root_cause: { type: "string", description: "For task_type='bugfix': your hypothesis about why the bug occurs. Must be ≥10 chars and not a placeholder ('unknown'/'tbd' rejected). State a hypothesis even if uncertain — verification happens in definition_of_done." },
+            reversibility: { type: "string", enum: ["easy", "moderate", "hard"], description: "Cost-of-being-wrong signal. 'hard' = migrations / deploys / data deletions / one-way operations. Surfaces a warning in the task message + logs a note; doesn't block. Make the trade explicit at planning time." },
           },
         },
       },
@@ -760,6 +784,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
         return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
       }
 
+      if (req.params.name === "check_cross_tenant_test") {
+        const args = CheckCrossTenantTestArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkCrossTenantTest(args.repo_root, standards);
+        await appendDrift(args.repo_root, "check_cross_tenant_test", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
       if (req.params.name === "check_client_bundle_secrets") {
         const args = CheckClientBundleSecretsArgs.parse(req.params.arguments ?? {});
         const standards = await loadStandards(args.repo_root);
@@ -805,7 +838,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
       if (req.params.name === "run_local_checks") {
         const args = RunLocalChecksArgs.parse(req.params.arguments ?? {});
-        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts"]);
+        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test"]);
         const standards = await loadStandards(args.repo_root);
         const sections: Array<{ source: string; findings: import("./check-ci.js").Finding[] }> = [];
         if (include.has("ci")) {
@@ -857,6 +890,11 @@ export function createServer(options: CreateServerOptions = {}): Server {
           const f = await checkHttpTimeouts(args.repo_root);
           sections.push({ source: "check_http_timeouts", findings: f });
           await appendDrift(args.repo_root, "check_http_timeouts", f);
+        }
+        if (include.has("cross_tenant_test")) {
+          const f = await checkCrossTenantTest(args.repo_root, standards);
+          sections.push({ source: "check_cross_tenant_test", findings: f });
+          await appendDrift(args.repo_root, "check_cross_tenant_test", f);
         }
         const isError = sections.some((s) => s.findings.some((f) => f.severity === "error"));
         return { isError, content: [{ type: "text", text: JSON.stringify(sections, null, 2) }] };

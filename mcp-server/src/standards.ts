@@ -128,6 +128,19 @@ export interface TenantIsolationConfig {
   data_layer_paths: string[];
   bypass_comment_pattern?: string;
   exempt_methods?: string[];
+  /**
+   * Path to a parameterised integration test that hits every authenticated
+   * route with a foreign tenant ID and asserts 403. When set, the
+   * check_cross_tenant_test invariant verifies the file exists and that its
+   * assertion count grows in step with new authenticated routes.
+   */
+  cross_tenant_test_file?: string;
+  /**
+   * Globs for route files. Used by check_cross_tenant_test to count
+   * authenticated routes for the parity check. Defaults to a heuristic if
+   * unset.
+   */
+  route_files?: string[];
 }
 
 export interface ModelSpec {

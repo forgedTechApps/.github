@@ -7,6 +7,13 @@ review uses that data to promote, demote, or delete rules.
 **Cadence:** every 90 days. Tie it to an existing rhythm (security review,
 quarterly planning) so it doesn't get skipped.
 
+**Automation:** copy
+[`agent-standards/workflows/quarterly-review.yml.template`](workflows/quarterly-review.yml.template)
+into each project's `.github/workflows/agent-standards-quarterly-review.yml`.
+The action runs on a quarterly cron (1st of Mar/Jun/Sep/Dec) and opens an
+issue with the report. The issue is the agenda — skipping the meeting
+doesn't skip the artifact.
+
 **Authority:** the user (Carlos) decides. The agent surfaces data and
 proposes actions; nothing auto-promotes or auto-demotes.
 
