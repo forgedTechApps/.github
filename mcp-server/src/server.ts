@@ -17,6 +17,7 @@ import {
   proposeChange,
   commitCheckpoint,
   expandScope,
+  attachAsvsReview,
 } from "./task-tracking.js";
 import { generateCi, type CiKind, type Language } from "./init-repo.js";
 
@@ -141,6 +142,14 @@ export function createServer(options: CreateServerOptions = {}): Server {
     path: z.string().min(1),
     reason: z.string().min(5),
     user_confirmed: z.boolean(),
+  });
+
+  const AttachAsvsReviewArgsZ = z.object({
+    repo_root: RepoRoot,
+    task_id: z.string().optional(),
+    controls_touched: z.array(z.string().min(1)).min(1),
+    verification: z.string().min(10),
+    reviewer: z.string().min(1),
   });
 
   const repoRootProp = defaultRepoRoot
@@ -404,6 +413,31 @@ export function createServer(options: CreateServerOptions = {}): Server {
           },
         },
       },
+      {
+        name: "attach_asvs_review",
+        description:
+          "Attach an OWASP ASVS L1 review artifact to the active task. Required to unblock " +
+          "propose_change when the auth_change_asvs_artifact gate (Increment 5) fires — i.e. the " +
+          "proposed write touches an auth path. Replaces 'mental review' with an audit trail: " +
+          "which ASVS controls the change touches, what was verified, and who/what reviewed.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot
+            ? ["controls_touched", "verification", "reviewer"]
+            : ["repo_root", "controls_touched", "verification", "reviewer"],
+          properties: {
+            repo_root: repoRootProp,
+            task_id: { type: "string", description: "Defaults to the active task." },
+            controls_touched: {
+              type: "array",
+              items: { type: "string" },
+              description: "ASVS L1 control IDs touched, e.g. ['V2.1.1', 'V3.4.1']. https://owasp.org/www-project-application-security-verification-standard/",
+            },
+            verification: { type: "string", description: "What was checked, and how. ≥10 chars." },
+            reviewer: { type: "string", description: "Who or what reviewed — agent name, person, or automated tool." },
+          },
+        },
+      },
     ],
   }));
 
@@ -577,6 +611,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
       if (req.params.name === "expand_scope") {
         const args = ExpandScopeArgsZ.parse(req.params.arguments ?? {});
         const result = await expandScope(args.repo_root, args);
+        return {
+          isError: result.blocked,
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      if (req.params.name === "attach_asvs_review") {
+        const args = AttachAsvsReviewArgsZ.parse(req.params.arguments ?? {});
+        const result = await attachAsvsReview(args.repo_root, args);
         return {
           isError: result.blocked,
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
