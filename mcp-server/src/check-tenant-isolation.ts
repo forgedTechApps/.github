@@ -9,48 +9,166 @@ import type { AgentStandards, TenantIsolationConfig } from "./standards.js";
 const exec = promisify(execCb);
 
 /**
- * Multi-tenant query isolation invariant (Increment 7).
+ * Multi-tenant query isolation invariant.
  *
  * For projects with `architecture.tenant_isolation` configured, every
  * function in the configured data_layer_paths must accept the configured
  * tenant_id_field as a parameter. Bypass via inline comment.
  *
- * Approach: regex on method signatures. Full AST would be more accurate but
- * the signature grammar is regular enough to make regex tractable. False
- * negatives are acceptable (cross-tenant integration test backstops); false
- * positives carry an explicit bypass.
+ * Supported languages: TypeScript / JavaScript (Increment 7), Python (Increment 8).
  *
- * Supported shapes (TypeScript):
- *   - Interface methods:           `methodName(args): ReturnType;`
- *   - Class methods:               `async? methodName(args): ReturnType {`
- *   - Object-literal methods:      `methodName: async (args) => ...`
- *   - Function declarations:       `function methodName(args): ReturnType {`
+ * Approach: per-language method-signature detection. Extract the params block
+ * (potentially multi-line) and check whether tenant_id_field appears as an
+ * identifier in it.
  *
- * Not supported (yet):
- *   - Generic type parameters spanning >1 line of the signature
- *   - Higher-order functions returning functions (the inner function isn't checked)
- *   - Languages other than TS/JS (.cs, .swift, .py, .dart). Add per-language
- *     parsers when generalising to other projects (Increment 8).
+ * False negatives are accepted (Increment 11's cross-tenant integration test
+ * backstops). False positives carry an explicit bypass.
  */
 
-/** Matches the start of a method/function signature. Captures method name + parameter list. */
-const METHOD_PATTERNS: RegExp[] = [
-  // interface body / class methods (with optional async/static/private/public/readonly)
-  /^\s*(?:async\s+|static\s+|public\s+|private\s+|protected\s+|readonly\s+)*([a-z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)\s*[:{;]/gm,
-  // object-literal: methodName: (args) => or methodName: async (args) =>
-  /^\s*([a-z_$][a-zA-Z0-9_$]*)\s*:\s*(?:async\s+)?\(([^)]*)\)\s*(?::|=>)/gm,
-  // function declarations
-  /^\s*(?:export\s+)?(?:async\s+)?function\s+([a-z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)/gm,
-];
+const DEFAULT_BYPASS_PATTERN = "tenant-isolation: bypass";
 
-/** Keywords that aren't methods (avoid catching them via the generic regex). */
-const NON_METHODS = new Set([
+interface MethodHit {
+  /** 0-indexed line number where the signature starts. */
+  startLine: number;
+  /** Method name as it appears in source. */
+  methodName: string;
+  /** Full parameter list text, with newlines preserved. */
+  params: string;
+}
+
+/**
+ * Per-language method-signature scanner. Returns hits ordered by appearance.
+ * Each scanner is responsible for handling multi-line params on its own.
+ */
+type Scanner = (content: string) => MethodHit[];
+
+/** TS/JS scanner. Handles interface methods, class methods, object-literal methods, and function declarations. */
+function scanTypeScript(content: string): MethodHit[] {
+  const hits: MethodHit[] = [];
+  const seen = new Set<string>();
+  // Patterns that anchor on "name(" — we then extract params via balanced-paren scan.
+  const startPatterns: RegExp[] = [
+    // class/interface method or function: `name(` after a modifier or line start
+    /^\s*(?:export\s+)?(?:async\s+|static\s+|public\s+|private\s+|protected\s+|readonly\s+|function\s+)*([a-z_$][a-zA-Z0-9_$]*)\s*\(/gm,
+    // object-literal method: `name: async (` or `name: (`
+    /^\s*([a-z_$][a-zA-Z0-9_$]*)\s*:\s*(?:async\s+)?\(/gm,
+  ];
+  for (const pat of startPatterns) {
+    pat.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pat.exec(content)) !== null) {
+      const methodName = m[1];
+      if (!methodName) continue;
+      if (NON_METHODS_TS.has(methodName)) continue;
+      const parenIdx = content.indexOf("(", m.index + m[0].length - 1);
+      if (parenIdx < 0) continue;
+      const params = extractBalanced(content, parenIdx);
+      if (params === null) continue;
+      // Disambiguate calls vs declarations: require ':' or '{' or ';' or '=>' after the close paren.
+      const afterClose = content.slice(parenIdx + 1 + params.length + 1).trimStart();
+      if (!/^(?:[:{;]|=>|<|\?:|\bextends\b)/.test(afterClose)) continue;
+      const startLine = content.slice(0, m.index).split("\n").length - 1;
+      const key = `${methodName}:${startLine}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hits.push({ startLine, methodName, params });
+    }
+  }
+  return hits;
+}
+
+/**
+ * Python scanner. `def name(` and `async def name(` only.
+ * Skips `_`-prefixed names by convention (private helpers, dunders). Python
+ * service modules conventionally mix public query functions with private
+ * compute helpers; the helpers don't touch the database and shouldn't trigger
+ * the invariant. If a project genuinely wants private functions checked,
+ * they can name them without the leading underscore.
+ */
+function scanPython(content: string): MethodHit[] {
+  const hits: MethodHit[] = [];
+  const seen = new Set<string>();
+  const pat = /^\s*(?:async\s+)?def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/gm;
+  let m: RegExpExecArray | null;
+  while ((m = pat.exec(content)) !== null) {
+    const methodName = m[1];
+    if (!methodName) continue;
+    if (methodName.startsWith("_")) continue; // skip private + dunder
+    const parenIdx = m.index + m[0].length - 1;
+    const params = extractBalanced(content, parenIdx);
+    if (params === null) continue;
+    const startLine = content.slice(0, m.index).split("\n").length - 1;
+    const key = `${methodName}:${startLine}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hits.push({ startLine, methodName, params });
+  }
+  return hits;
+}
+
+/**
+ * Given content and the index of an opening '(', returns the text between '('
+ * and the matching ')' (multi-line, paren-balanced). Returns null if no match
+ * (truncated source).
+ */
+function extractBalanced(content: string, openIdx: number): string | null {
+  if (content[openIdx] !== "(") return null;
+  let depth = 1;
+  let i = openIdx + 1;
+  // Skip string contents to avoid mis-counting parens inside strings.
+  // Simple state machine — handles ", ', `, and escapes.
+  while (i < content.length) {
+    const ch = content[i];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      const quote = ch;
+      i++;
+      while (i < content.length) {
+        if (content[i] === "\\") { i += 2; continue; }
+        if (content[i] === quote) { i++; break; }
+        i++;
+      }
+      continue;
+    }
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) {
+        return content.slice(openIdx + 1, i);
+      }
+    }
+    i++;
+  }
+  return null;
+}
+
+/** Keywords that aren't methods (TS only — Python's `def` makes this unambiguous). */
+const NON_METHODS_TS = new Set([
   "if", "else", "for", "while", "switch", "return", "catch", "throw", "try",
   "typeof", "instanceof", "new", "delete", "void", "await", "yield",
-  "constructor", // constructors are special; tenant_id is enforced on instance methods
+  "constructor",
 ]);
 
-const DEFAULT_BYPASS_PATTERN = "tenant-isolation: bypass";
+const LANG_SCANNERS: Array<{ exts: string[]; scanner: Scanner; testPattern: RegExp }> = [
+  {
+    exts: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+    scanner: scanTypeScript,
+    testPattern: /\.test\.|\.spec\./,
+  },
+  {
+    exts: [".py"],
+    scanner: scanPython,
+    testPattern: /(?:^|\/)(?:test_|_test\.py$|tests?\/)/,
+  },
+];
+
+function pickScanner(filePath: string): { scanner: Scanner; testPattern: RegExp } | null {
+  for (const lang of LANG_SCANNERS) {
+    for (const ext of lang.exts) {
+      if (filePath.endsWith(ext)) return { scanner: lang.scanner, testPattern: lang.testPattern };
+    }
+  }
+  return null;
+}
 
 async function listTrackedFiles(repoRoot: string): Promise<string[]> {
   try {
@@ -61,16 +179,7 @@ async function listTrackedFiles(repoRoot: string): Promise<string[]> {
   }
 }
 
-interface UncheckedMethod {
-  file: string;
-  line: number;
-  methodName: string;
-  params: string;
-}
-
 function paramListMentions(params: string, tenantField: string): boolean {
-  // Match the field as an identifier (handle `householdId: string`, `householdId,`, etc.)
-  // Avoid matching it inside a longer name like `oldHouseholdId`.
   const re = new RegExp(`\\b${tenantField}\\b`);
   return re.test(params);
 }
@@ -85,17 +194,20 @@ function lineHasBypass(lines: string[], lineIdx: number, bypassPattern: string):
 }
 
 function fileHasGlobalBypass(content: string, bypassPattern: string): boolean {
-  // File-level bypass: a line at the top of the file (before any non-comment line)
-  // containing the bypass pattern. Useful for declaring whole-file exemption.
+  // File-level bypass: a comment-block line near the top containing the pattern.
   const lines = content.split("\n");
   for (const line of lines.slice(0, 20)) {
     const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+    if (
+      trimmed === "" ||
+      trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*") ||
+      trimmed.startsWith("#") ||
+      trimmed.startsWith('"""') || trimmed.startsWith("'''")
+    ) {
       if (line.includes(bypassPattern)) return true;
       continue;
     }
-    // First non-comment line → stop looking
-    break;
+    break; // first non-comment line — stop looking
   }
   return false;
 }
@@ -103,8 +215,9 @@ function fileHasGlobalBypass(content: string, bypassPattern: string): boolean {
 async function scanFile(
   repoRoot: string,
   relPath: string,
-  config: TenantIsolationConfig
-): Promise<UncheckedMethod[]> {
+  config: TenantIsolationConfig,
+  scanner: Scanner,
+): Promise<MethodHit[]> {
   let content: string;
   try {
     content = await readFile(join(repoRoot, relPath), "utf8");
@@ -116,36 +229,13 @@ async function scanFile(
 
   const lines = content.split("\n");
   const exempt = new Set(config.exempt_methods ?? []);
-  const seen = new Set<string>(); // dedupe by `methodName:line` — multiple patterns may match the same site
-  const findings: UncheckedMethod[] = [];
-
-  // Build a line-number index by scanning for matches via patterns
-  for (const pattern of METHOD_PATTERNS) {
-    pattern.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = pattern.exec(content)) !== null) {
-      const methodName = m[1];
-      const params = m[2] ?? "";
-      if (!methodName) continue;
-      if (NON_METHODS.has(methodName)) continue;
-      if (exempt.has(methodName)) continue;
-
-      // Resolve line number from the match offset
-      const lineIdx = content.slice(0, m.index).split("\n").length - 1;
-      const key = `${methodName}:${lineIdx}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      if (lineHasBypass(lines, lineIdx, bypassPattern)) continue;
-      if (paramListMentions(params, config.tenant_id_field)) continue;
-
-      findings.push({
-        file: relPath,
-        line: lineIdx + 1,
-        methodName,
-        params: params.trim(),
-      });
-    }
+  const hits = scanner(content);
+  const findings: MethodHit[] = [];
+  for (const hit of hits) {
+    if (exempt.has(hit.methodName)) continue;
+    if (lineHasBypass(lines, hit.startLine, bypassPattern)) continue;
+    if (paramListMentions(hit.params, config.tenant_id_field)) continue;
+    findings.push(hit);
   }
   return findings;
 }
@@ -168,34 +258,39 @@ export async function checkTenantIsolation(
     return [{ severity: "info", code: "TENANT_ISOLATION_NO_FILES", message: "git ls-files returned no tracked files." }];
   }
 
-  // Filter to files matching any data_layer_paths glob, .ts/.tsx/.js/.mjs only
-  const targets = allFiles.filter((f) => {
-    if (!/\.(ts|tsx|js|mjs|cjs)$/.test(f)) return false;
-    if (/\.test\.|\.spec\./.test(f)) return false; // skip tests
-    return config.data_layer_paths.some((g) => minimatch(f, g));
-  });
+  // Filter to files matching any data_layer_paths glob, with a supported scanner, excluding tests.
+  interface Target { file: string; scanner: Scanner; }
+  const targets: Target[] = [];
+  for (const file of allFiles) {
+    if (!config.data_layer_paths.some((g) => minimatch(file, g))) continue;
+    const lang = pickScanner(file);
+    if (!lang) continue;
+    if (lang.testPattern.test(file)) continue;
+    targets.push({ file, scanner: lang.scanner });
+  }
 
   if (targets.length === 0) {
     return [{
       severity: "warn",
       code: "TENANT_ISOLATION_NO_TARGETS",
-      message: `No files matched architecture.tenant_isolation.data_layer_paths [${config.data_layer_paths.join(", ")}]. Check the globs.`,
+      message: `No supported files matched architecture.tenant_isolation.data_layer_paths [${config.data_layer_paths.join(", ")}]. Check the globs.`,
     }];
   }
 
   const findings: Finding[] = [];
-  for (const file of targets) {
-    const unchecked = await scanFile(repoRoot, file, config);
-    for (const u of unchecked) {
+  for (const target of targets) {
+    const hits = await scanFile(repoRoot, target.file, config, target.scanner);
+    for (const h of hits) {
+      const paramsOneLine = h.params.replace(/\s+/g, " ").trim().slice(0, 80);
       findings.push({
         severity: "error",
         code: "TENANT_ISOLATION_MISSING",
         message:
-          `${u.file}:${u.line}: method '${u.methodName}(${u.params})' does not accept '${config.tenant_id_field}' as a parameter. ` +
+          `${target.file}:${h.startLine + 1}: method '${h.methodName}(${paramsOneLine})' does not accept '${config.tenant_id_field}' as a parameter. ` +
           `Multi-tenant invariant: every query in the data layer must scope by tenant.`,
         fix:
-          `Add '${config.tenant_id_field}: string' to the parameter list and use it in the query filter. ` +
-          `If this method is legitimately tenant-free, add an inline comment '// ${config.bypass_comment_pattern ?? DEFAULT_BYPASS_PATTERN}: <reason>' on the line above the signature.`,
+          `Add '${config.tenant_id_field}' to the parameter list and use it in the query filter. ` +
+          `If this method is legitimately tenant-free, add an inline comment '// ${config.bypass_comment_pattern ?? DEFAULT_BYPASS_PATTERN}: <reason>' (or '# ' for Python) on the line above the signature.`,
       });
     }
   }
