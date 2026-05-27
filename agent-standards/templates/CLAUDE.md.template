@@ -192,6 +192,50 @@ These three sentences alone prevent most over-engineering.
 - **If you notice the agent re-reading the same file or running redundant
   searches, interrupt and redirect.** Don't pay tokens for it to remind itself.
 
+## Hooks (Increment 9)
+
+Projects can register two Claude Code hooks in `.claude/settings.json` to
+move enforcement from honour-system MCP calls to event-driven side-effects:
+
+- **`SessionStart`** runs at the beginning of every session. Reads the
+  project's `models:` block + active task state and injects the routing
+  reminder + active task scope as `additionalContext`. Surfaces phase/model
+  mismatches at session start instead of waiting for the agent to call
+  `start_task`.
+- **`PreCompact`** runs before context compaction (auto or `/compact`).
+  Dumps active task state + recent drift-log entries to
+  `.agent-state/pre-compact-{timestamp}.md` and points the post-compact
+  agent at the file via `additionalContext`. The implementation of "after
+  every two search/read ops, write findings somewhere durable" at the
+  moment compaction is about to discard them.
+
+Hook scripts live in `forgedtech/agent-standards/hooks/`. Registration
+example:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{
+      "matcher": "startup",
+      "hooks": [{
+        "type": "command",
+        "command": "node /path/to/forgedtech/agent-standards/hooks/session-start.mjs"
+      }]
+    }],
+    "PreCompact": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node /path/to/forgedtech/agent-standards/hooks/pre-compact.mjs"
+      }]
+    }]
+  }
+}
+```
+
+Hooks fail silently if the project doesn't use agent-standards (no
+`.agent-standards.yml`, no tasks file). They never block a session or
+compaction on their own bugs.
+
 ## When the agent makes a mistake
 
 If the user had to correct something the agent should have known:
