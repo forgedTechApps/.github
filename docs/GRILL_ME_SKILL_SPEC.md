@@ -1,10 +1,16 @@
-# grill-me Skill — Deferred Spec
+# grill-me Skill — Spec (SHIPPED)
 
-**Status:** Deferred to ~W10–W11. **Do not implement yet.**
+**Status:** **Shipped 2026-05-27** as Increment 8.5 (prereqs) + skill install. Canonical skill lives at `agent-standards/skills/grill-me/SKILL.md`. Canary install on eleven11v2 via symlink to `.claude/skills/grill-me`.
 
-**Why deferred:** Two prerequisite MCP tools must ship first — `surface_uncertainty` and `bugfix_root_cause` — both currently flagged in IMPLEMENTATION_PLAN.md as deferred-pending-data. Shipping the skill against tools that don't exist would either fail at runtime or force premature builds of those tools.
+**What shipped vs this spec:** the broad strokes match. Concrete drift:
+- `task_type` field added to `start_task` directly (spec proposed it as a separate concept). Same effect.
+- `surface_uncertainty` lives on `TaskRecord.uncertainties[]` with explicit resolve via `{ resolve: { description, resolution } }` — not a separate state-machine.
+- `bugfix_root_cause` gate enforces ≥10 chars + placeholder rejection. Verified hypothesis quality is downstream homework (definition_of_done verification).
+- Strict-mode for surface_uncertainty is configured via `gates.surface_uncertainty.{default_mode, strict_mode_projects}`. The sensitive trio overrides land per-project when each adopts.
 
-**When to revisit:** After Increment 8 (multi-tenant generalisation) lands, build `surface_uncertainty` + `bugfix_root_cause` as Increment 8.5, then implement this spec as Increment 9 (renumbering the original Increment 9 hooks work to follow).
+**Original deferral context (kept for posterity):**
+
+Two prerequisite MCP tools were missing — `surface_uncertainty` and `bugfix_root_cause`. Both shipped as Increment 8.5 before the skill itself.
 
 **Reading order:**
 1. This orientation header (you are here).
