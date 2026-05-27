@@ -16,6 +16,7 @@ import {
   startTask,
   proposeChange,
   commitCheckpoint,
+  expandScope,
 } from "./task-tracking.js";
 import { generateCi, type CiKind, type Language } from "./init-repo.js";
 
@@ -132,6 +133,14 @@ export function createServer(options: CreateServerOptions = {}): Server {
     writes: z.array(z.string()).optional(),
     note: z.string().optional(),
     close: z.boolean().optional(),
+  });
+
+  const ExpandScopeArgsZ = z.object({
+    repo_root: RepoRoot,
+    task_id: z.string().optional(),
+    path: z.string().min(1),
+    reason: z.string().min(5),
+    user_confirmed: z.boolean(),
   });
 
   const repoRootProp = defaultRepoRoot
@@ -371,6 +380,30 @@ export function createServer(options: CreateServerOptions = {}): Server {
           },
         },
       },
+      {
+        name: "expand_scope",
+        description:
+          "Add a path to the active task's files_intended. Required to unblock propose_change when " +
+          "the scope-expansion gate (Increment 3) fires. Demands user_confirmed=true — the agent " +
+          "must have asked the user before declaring confirmation, since the MCP can't see the user's " +
+          "answer. Without confirmation, the call is refused and the agent must revert or ask again.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot
+            ? ["path", "reason", "user_confirmed"]
+            : ["repo_root", "path", "reason", "user_confirmed"],
+          properties: {
+            repo_root: repoRootProp,
+            task_id: { type: "string", description: "Defaults to the active task." },
+            path: { type: "string", description: "Path or glob to add to files_intended." },
+            reason: { type: "string", description: "Why the original plan didn't cover this file. ≥5 chars." },
+            user_confirmed: {
+              type: "boolean",
+              description: "Agent asserts that the user explicitly approved adding this path. Without this, the call is refused.",
+            },
+          },
+        },
+      },
     ],
   }));
 
@@ -539,6 +572,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
         const args = CommitCheckpointArgsZ.parse(req.params.arguments ?? {});
         const result = await commitCheckpoint(args.repo_root, args);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
+      if (req.params.name === "expand_scope") {
+        const args = ExpandScopeArgsZ.parse(req.params.arguments ?? {});
+        const result = await expandScope(args.repo_root, args);
+        return {
+          isError: result.blocked,
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
       }
 
       throw new Error(`Unknown tool: ${req.params.name}`);
