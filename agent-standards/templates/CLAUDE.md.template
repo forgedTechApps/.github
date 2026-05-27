@@ -103,6 +103,50 @@ For any non-trivial change:
 If the change is one or two lines, skip the ceremony — but still narrate the
 intent in one sentence before editing.
 
+## Workflow gates (definition-of-ready + scope-expansion)
+
+When a project enables these in `.agent-standards.yml`, the MCP enforces the
+plan-before-code discipline mechanically:
+
+### Definition-of-ready
+
+`start_task` with `phase='execution'` **blocks** unless you provide:
+
+| Field | What it is |
+| --- | --- |
+| `scope_statement` | One-sentence description of what changes. |
+| `files_intended` | Explicit list of paths/globs you expect to touch. |
+| `test_approach` | How the change will be verified. |
+| `definition_of_done` | Observable outcome (test passes, endpoint returns X, etc.). |
+| `out_of_scope` | Explicit "will NOT do" list. The antidote to "while I'm here". |
+
+Pass `size: 'trivial'` to bypass for genuine one-liners. The bypass is logged.
+
+### Scope-expansion
+
+`propose_change` **blocks** with `TASK_SCOPE_EXPANSION` if the path isn't in
+`files_intended`. To unblock:
+
+1. **Ask the user** whether the new path should be in scope.
+2. If they agree, call:
+   ```
+   expand_scope({ task_id, path, reason: "...", user_confirmed: true })
+   ```
+3. If they decline, revert the urge and complete the original scope first.
+
+The MCP can't see the user's answer — `user_confirmed: true` is your assertion
+that you asked. Every `expand_scope` is logged.
+
+### Why this exists
+
+- Half of scope creep happens because "done" was never defined. The other
+  half because "out of scope" was never explicit. DoR addresses both.
+- "While I'm here" refactors are the most common class of unwanted PR change.
+  The scope-expansion gate catches them at the moment they happen.
+
+If `expand_scope` is firing more than once per task on average, the DoR plan
+was too narrow — make `files_intended` broader next time, not the gate weaker.
+
 ## Break work into 3–5 chunks
 
 Tasks larger than ~5 file changes or that span >2 unrelated areas should be
