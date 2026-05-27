@@ -47,22 +47,16 @@ style:
   - rule: "No commented-out code in committed changes. Delete it — git history is the archive."
     tier: invariant
     id: no_commented_code
-    check_command: "scripts/check-no-commented-code.sh"
-    severity: error
-    deferred:
-      owner: "Carlos"
-      target: "W6"
-      reason: "Script not yet built — Increment 6"
+    check_command: "mcp:check_codebase_hygiene"
+    severity: warn
+    # severity stays at 'warn' during the per-project cleanup-pass window
+    # (Increment 6 part 2). Promote to 'error' after each project cleans up.
 
   - rule: "No TODOs without a linked tracking issue (e.g. `// TODO(#123): ...`). Untracked TODOs decay into noise."
     tier: invariant
     id: no_untracked_todos
-    check_command: "scripts/check-todos-tracked.sh"
-    severity: error
-    deferred:
-      owner: "Carlos"
-      target: "W6"
-      reason: "Script not yet built — Increment 6"
+    check_command: "mcp:check_codebase_hygiene"
+    severity: warn
 
   - rule: "Conventional Commits: feat:, fix:, chore:, test:, docs:, ci:, refactor:, perf:, style:."
     tier: invariant
