@@ -37,6 +37,13 @@ export interface TaskRecord {
   actual_reads: string[];
   actual_writes: string[];
   notes: string[];
+  // ── Definition-of-ready (Increment 2) — populated when DoR gate is enabled ──
+  scope_statement?: string;
+  files_intended?: string[];
+  test_approach?: string;
+  definition_of_done?: string;
+  out_of_scope?: string[];
+  size?: "trivial" | "standard" | "large";
 }
 
 interface TasksFile {
@@ -77,6 +84,13 @@ export interface StartTaskArgs {
   current_model?: string; // agent-declared, e.g. "claude-opus-4-7"
   expected_reads?: string[];
   expected_writes?: string[];
+  // ── Definition-of-ready (Increment 2) ──
+  scope_statement?: string;
+  files_intended?: string[];
+  test_approach?: string;
+  definition_of_done?: string;
+  out_of_scope?: string[];
+  size?: "trivial" | "standard" | "large";
 }
 
 export interface StartTaskResult {
@@ -85,6 +99,31 @@ export interface StartTaskResult {
   recommended_model?: { model: string; effort?: string };
   blocked: boolean;
   message: string;
+  /** When the DoR gate fires, lists the field names that were missing. */
+  dor_missing_fields?: string[];
+}
+
+/** Default required DoR fields; project can override via standards.gates.definition_of_ready.required_fields. */
+const DEFAULT_DOR_REQUIRED = [
+  "scope_statement",
+  "files_intended",
+  "test_approach",
+  "definition_of_done",
+  "out_of_scope",
+] as const;
+
+type DorField = (typeof DEFAULT_DOR_REQUIRED)[number];
+
+/** Returns the missing DoR fields, or [] if all required fields are present. */
+function checkDoR(args: StartTaskArgs, required: readonly DorField[]): DorField[] {
+  const missing: DorField[] = [];
+  for (const f of required) {
+    const v = args[f];
+    if (v === undefined || v === null) { missing.push(f); continue; }
+    if (typeof v === "string" && v.trim().length === 0) { missing.push(f); continue; }
+    if (Array.isArray(v) && v.length === 0) { missing.push(f); continue; }
+  }
+  return missing;
 }
 
 export async function startTask(
@@ -119,6 +158,28 @@ export async function startTask(
     };
   }
 
+  // ── Definition-of-ready gate (Increment 2) ─────────────────────────────────
+  // Fires on phase='execution' when the project has opted in and size != trivial.
+  const dorEnabled = standards.gates?.definition_of_ready?.enabled === true;
+  const dorRequired = (standards.gates?.definition_of_ready?.required_fields ?? DEFAULT_DOR_REQUIRED) as readonly DorField[];
+  const size = args.size ?? "standard";
+  if (dorEnabled && phase === "execution" && size !== "trivial") {
+    const missing = checkDoR(args, dorRequired);
+    if (missing.length > 0) {
+      return {
+        task_id: "",
+        phase,
+        recommended_model: expected ? { model: expected.model, effort: expected.effort } : undefined,
+        blocked: true,
+        message:
+          `TASK_DOR_INCOMPLETE: phase='execution' requires definition-of-ready fields ` +
+          `[${missing.join(", ")}]. Fill them on the planning side before transitioning, or pass size='trivial' ` +
+          `to bypass (the bypass is logged). Required by this project's gates.definition_of_ready.enabled.`,
+        dor_missing_fields: missing,
+      };
+    }
+  }
+
   const data = await load(repoRoot);
   const task: TaskRecord = {
     id: randomUUID().slice(0, 8),
@@ -132,7 +193,16 @@ export async function startTask(
     actual_reads: [],
     actual_writes: [],
     notes: [],
+    scope_statement: args.scope_statement,
+    files_intended: args.files_intended,
+    test_approach: args.test_approach,
+    definition_of_done: args.definition_of_done,
+    out_of_scope: args.out_of_scope,
+    size: args.size,
   };
+  if (dorEnabled && phase === "execution" && size === "trivial") {
+    task.notes.push(`[${new Date().toISOString()}] DoR bypassed via size='trivial'.`);
+  }
   data.tasks.push(task);
   data.active_task_id = task.id;
   await save(repoRoot, data);
@@ -143,6 +213,9 @@ export async function startTask(
   }
   if (expected) {
     tips.push(`Phase '${phase}' uses model='${expected.model}'${expected.effort ? ` effort='${expected.effort}'` : ""}.`);
+  }
+  if (dorEnabled && phase === "planning") {
+    tips.push("DoR gate is enabled — fill scope_statement / files_intended / test_approach / definition_of_done / out_of_scope before transitioning to execution.");
   }
 
   return {
