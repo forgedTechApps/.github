@@ -49,6 +49,8 @@ export interface AgentStandards {
     rules_ui?: RawRule[];
     feature_path_pattern?: string;
     sensitive_paths?: string[];
+    /** Multi-tenant isolation invariant config (Increment 7). */
+    tenant_isolation?: TenantIsolationConfig;
   };
   test_coverage?: {
     unit_min?: number;
@@ -107,6 +109,13 @@ export interface AgentStandards {
       paths?: string[];
     };
   };
+}
+
+export interface TenantIsolationConfig {
+  tenant_id_field: string;
+  data_layer_paths: string[];
+  bypass_comment_pattern?: string;
+  exempt_methods?: string[];
 }
 
 export interface ModelSpec {

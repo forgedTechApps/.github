@@ -137,6 +137,33 @@
           "type": "array",
           "description": "Paths where 'hard mode' applies — agent must justify changes against the recorded hypothesis. Glob patterns.",
           "items": { "type": "string" }
+        },
+        "tenant_isolation": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Multi-tenant isolation invariant (Increment 7). When configured, check_tenant_isolation verifies every function in data_layer_paths accepts tenant_id_field as a parameter. Inline bypass: '// tenant-isolation: bypass <reason>'.",
+          "required": ["tenant_id_field", "data_layer_paths"],
+          "properties": {
+            "tenant_id_field": {
+              "type": "string",
+              "description": "Parameter name that identifies the tenant (e.g. 'householdId' for Kurata, 'accountId' for TradingBot)."
+            },
+            "data_layer_paths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Glob patterns for files containing tenant-scoped queries. e.g. ['packages/api/src/data/repos.ts', 'packages/api/src/data/drizzle.ts']"
+            },
+            "bypass_comment_pattern": {
+              "type": "string",
+              "description": "Regex matching the inline bypass directive. Defaults to '// tenant-isolation: bypass'.",
+              "default": "// tenant-isolation: bypass"
+            },
+            "exempt_methods": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Method names that are legitimately tenant-free (e.g. 'create' on the tenant entity itself, cross-tenant scanner queries). Each entry should ALSO carry a bypass comment in source; this is a project-level allowlist for repeated patterns."
+            }
+          }
         }
       }
     },

@@ -162,6 +162,14 @@ architecture:
         reason: "Generic AST check infeasible. Mitigated via cross-tenant integration test as Invariant."
         issue: "https://github.com/forgedTechApps/.github/issues/7"
 
+    - rule: "Multi-tenant projects: every query function in the data layer accepts the tenant id as a parameter. Configure architecture.tenant_isolation to enable mechanical enforcement."
+      tier: invariant
+      id: multi_tenant_query_isolation
+      check_command: "mcp:check_tenant_isolation"
+      severity: error
+      # No-op when architecture.tenant_isolation is unset. Active when configured.
+      # Bypass via inline '// tenant-isolation: bypass <reason>' comment per method.
+
     - rule: "External HTTP calls must set explicit timeouts and have a documented failure mode (retry, circuit-break, fallback). No bare unbounded fetch()."
       tier: invariant
       id: external_http_has_timeout
