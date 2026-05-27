@@ -12,6 +12,11 @@
       "oneOf": [{ "const": 1 }, { "const": 2 }],
       "description": "Schema version. v2 adds tier metadata on rules; plain strings still accepted as legacy form (tier: practice)."
     },
+    "framework_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional. The framework version this project was last wired against. When set + lower than the MCP server's CURRENT_FRAMEWORK_VERSION, get_standards surfaces FRAMEWORK_VERSION_DRIFT — projects then run sync-and-build.sh + restart Claude Code to pick up new tools/rules. Omit to suppress the drift check."
+    },
     "extends": {
       "oneOf": [
         { "type": "string" },

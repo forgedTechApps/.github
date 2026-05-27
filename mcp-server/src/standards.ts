@@ -5,6 +5,21 @@ import { parse as parseYaml } from "yaml";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import schema from "../../agent-standards/schema/agent-standards.schema.json" with { type: "json" };
 
+/**
+ * Framework version. Bumped when meaningful changes ship that projects
+ * might want to know about: new MCP tools, new gates, new top-level
+ * standards fields. Project standards can declare framework_version; if
+ * lower than this, get_standards surfaces a FRAMEWORK_VERSION_DRIFT
+ * info finding.
+ *
+ * History:
+ *   1 — Initial version (introduced after Increment 11 + Beyond-W15
+ *       cash-up). Covers all 25 MCP tools, all 5 workflow gates, all
+ *       rule-metrics infrastructure, hooks (SessionStart + PreCompact),
+ *       grill-me skill. Code-complete baseline.
+ */
+export const CURRENT_FRAMEWORK_VERSION = 1;
+
 export type Tier = "invariant" | "gate" | "practice";
 
 export interface DeferredCheck {
@@ -30,6 +45,13 @@ export type RawRule =
 
 export interface AgentStandards {
   version: 1 | 2;
+  /**
+   * Optional framework-version pin. When set + lower than
+   * CURRENT_FRAMEWORK_VERSION in the MCP server, get_standards surfaces
+   * a FRAMEWORK_VERSION_DRIFT info finding so projects know to refresh
+   * (pull + sync-and-build.sh + restart session).
+   */
+  framework_version?: number;
   extends?: string | string[];
   repo: string;
   language: "swift" | "flutter" | "node" | "python" | "dotnet" | "mixed";
@@ -360,6 +382,20 @@ export interface StandardsWithTiers extends AgentStandards {
     practice: Array<NormalisedRule & { source: RuleSource }>;
   };
   deferred_invariants: Array<NormalisedRule & { source: RuleSource }>;
+  /**
+   * Framework-version status. Present when the MCP server's
+   * CURRENT_FRAMEWORK_VERSION is known. Status:
+   *   - "current": project's framework_version matches CURRENT
+   *   - "drift": project's framework_version < CURRENT — refresh recommended
+   *   - "ahead": project declares a version > CURRENT — MCP server is stale
+   *   - "unpinned": project doesn't declare framework_version (no warning)
+   */
+  framework_version_status: {
+    project: number | null;
+    current: number;
+    status: "current" | "drift" | "ahead" | "unpinned";
+    message?: string;
+  };
 }
 
 /**
@@ -388,5 +424,36 @@ export function groupRulesByTier(s: AgentStandards): StandardsWithTiers {
   collect(s.architecture?.rules, "architecture.rules");
   collect(s.architecture?.rules_ui, "architecture.rules_ui");
 
-  return { ...s, rules_by_tier: groups, deferred_invariants: deferred };
+  // Framework-version drift check.
+  const projectVersion = s.framework_version ?? null;
+  let status: "current" | "drift" | "ahead" | "unpinned";
+  let message: string | undefined;
+  if (projectVersion === null) {
+    status = "unpinned";
+  } else if (projectVersion === CURRENT_FRAMEWORK_VERSION) {
+    status = "current";
+  } else if (projectVersion < CURRENT_FRAMEWORK_VERSION) {
+    status = "drift";
+    message =
+      `Project framework_version=${projectVersion} but MCP server is at version=${CURRENT_FRAMEWORK_VERSION}. ` +
+      `New tools / rules / gates may exist that this project hasn't picked up. ` +
+      `Refresh: \`./mcp-server/scripts/sync-and-build.sh\` in the forgedtech checkout, then restart this Claude Code session.`;
+  } else {
+    status = "ahead";
+    message =
+      `Project framework_version=${projectVersion} is HIGHER than the MCP server's CURRENT_FRAMEWORK_VERSION=${CURRENT_FRAMEWORK_VERSION}. ` +
+      `The MCP server may be stale — pull + sync-and-build.sh in the forgedtech checkout.`;
+  }
+
+  return {
+    ...s,
+    rules_by_tier: groups,
+    deferred_invariants: deferred,
+    framework_version_status: {
+      project: projectVersion,
+      current: CURRENT_FRAMEWORK_VERSION,
+      status,
+      ...(message ? { message } : {}),
+    },
+  };
 }

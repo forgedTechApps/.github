@@ -221,3 +221,81 @@ hotfix/*  ──┘
 6. Add any repo-specific secrets (deploy tokens etc.)
 7. The org-level branch protection and issue templates apply automatically
 8. Open a test PR — done
+
+---
+
+## After pulling framework changes
+
+The `forgedtech/.github` repo holds the agent-standards MCP server and the
+org-default `.agent-standards.yml`. When you pull new changes — new tools,
+new rules, new gate logic — projects don't pick them up automatically.
+
+### The three-step refresh
+
+```bash
+cd /Users/dev/Development/forgedtech
+git pull
+./mcp-server/scripts/sync-and-build.sh
+# then: restart any active Claude Code session in your projects
+```
+
+That's the whole flow. The script:
+
+1. **Syncs** the canonical `agent-standards/defaults/org-defaults.yml` into
+   the MCP server's bundled location (`mcp-server/templates/defaults/`).
+2. **Builds** `mcp-server/dist/` so the next MCP spawn runs the new code.
+3. **Prints** the per-project opt-in reminders + tells you to restart
+   active sessions.
+
+It's safe to run repeatedly. If nothing changed, it just confirms sync.
+
+### Why restart Claude Code
+
+The MCP server is spawned per Claude Code session. An already-running
+session holds the previous binary in memory. Newly-spawned sessions
+automatically use the rebuilt `dist/`. So new sessions → no action; active
+sessions → restart.
+
+### How projects know they're behind
+
+Each project's `.agent-standards.yml` can declare a `framework_version`.
+If set and lower than the MCP server's compiled version, `get_standards`
+surfaces a `FRAMEWORK_VERSION_DRIFT` info finding:
+
+```
+[info] FRAMEWORK_VERSION_DRIFT: this project declares framework_version=3
+but the MCP server is at version=8. New tools may exist that this
+project hasn't opted into. Pull + ./sync-and-build.sh + restart session.
+```
+
+Adding `framework_version` is optional. Without it, drift is silent —
+the framework just keeps working with whatever the project does set.
+
+### What changes vs what doesn't
+
+| Change source | Pick-up requires |
+|---|---|
+| Bug fix in an existing check | Rebuild + restart session |
+| New check / new MCP tool | Rebuild + restart session |
+| New rule in `org-defaults.yml` | Rebuild + restart session (sync copies it into bundled defaults) |
+| New gate that defaults to **disabled** | Above + per-project `.agent-standards.yml` opt-in |
+| New project-specific config field | Above + edit the project's `.agent-standards.yml` |
+
+### Per-project opt-in reminders
+
+Gates that are **off by default** in org-defaults — projects must opt in:
+
+- `gates.definition_of_ready.enabled`
+- `gates.scope_expansion.enabled`
+- `gates.surface_uncertainty.enabled`
+- `gates.bugfix_root_cause.enabled`
+
+Always-on (org-default):
+
+- `gates.auth_change_asvs_artifact.enabled: true` — fires for any project
+  whose proposed paths match `**/auth/**`, `**/permissions/**`,
+  `**/session/**`. Projects without those paths see no effect.
+
+Every `check_*` MCP tool is always available — no opt-in needed. They're
+no-ops for projects that don't apply (e.g. `check_view_size` does nothing
+when `ci.kind` isn't `mobile`/`web`).
