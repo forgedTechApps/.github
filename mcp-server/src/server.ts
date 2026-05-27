@@ -108,6 +108,13 @@ export function createServer(options: CreateServerOptions = {}): Server {
     current_model: z.string().optional(),
     expected_reads: z.array(z.string()).optional(),
     expected_writes: z.array(z.string()).optional(),
+    // ── Definition-of-ready fields (Increment 2) ──
+    scope_statement: z.string().min(10).optional(),
+    files_intended: z.array(z.string()).optional(),
+    test_approach: z.string().min(5).optional(),
+    definition_of_done: z.string().min(5).optional(),
+    out_of_scope: z.array(z.string()).optional(),
+    size: z.enum(["trivial", "standard", "large"]).optional(),
   });
 
   const ProposeChangeArgsZ = z.object({
@@ -290,12 +297,13 @@ export function createServer(options: CreateServerOptions = {}): Server {
         name: "start_task",
         description:
           "Record a hypothesis-first plan before doing work. Captures description, hypothesis, " +
-          "expected reads/writes, and phase (planning|execution). Returns a task_id and the " +
-          "recommended model for the phase. " +
-          "BLOCKS if current_model is declared and doesn't match the phase's expected family — " +
-          "i.e. starting a 'planning' task while running on Sonnet returns a block + dispatch " +
-          "instruction. The MCP can't independently detect which model called it, so the check " +
-          "depends on the agent honestly passing current_model.",
+          "expected reads/writes, phase (planning|execution), and (when the project enables it) " +
+          "definition-of-ready fields (scope_statement, files_intended, test_approach, " +
+          "definition_of_done, out_of_scope). Returns a task_id and the recommended model. " +
+          "BLOCKS if current_model is declared and doesn't match the phase's expected family. " +
+          "BLOCKS the planning→execution transition if the project has gates.definition_of_ready " +
+          "enabled and DoR fields are missing (size='trivial' bypasses but is logged). " +
+          "The model check depends on the agent honestly passing current_model.",
         inputSchema: {
           type: "object",
           required: defaultRepoRoot ? ["description", "hypothesis"] : ["repo_root", "description", "hypothesis"],
@@ -315,6 +323,12 @@ export function createServer(options: CreateServerOptions = {}): Server {
             },
             expected_reads: { type: "array", items: { type: "string" }, description: "File paths or globs you expect to read." },
             expected_writes: { type: "array", items: { type: "string" }, description: "File paths or globs you expect to modify." },
+            scope_statement: { type: "string", description: "One-sentence description of what changes. Required by definition_of_ready gate when phase='execution' (unless size='trivial')." },
+            files_intended: { type: "array", items: { type: "string" }, description: "Explicit file paths/globs the agent expects to touch. Used by scope-expansion gate in propose_change." },
+            test_approach: { type: "string", description: "How the change will be verified (test-first / build-then-test / specific test commands)." },
+            definition_of_done: { type: "string", description: "Observable outcome: 'test X passes', 'endpoint Y returns 200 with payload Z', etc." },
+            out_of_scope: { type: "array", items: { type: "string" }, description: "Explicit list of things the agent will NOT do during this task — antidote to 'while I'm here' refactors." },
+            size: { type: "string", enum: ["trivial", "standard", "large"], default: "standard", description: "size='trivial' skips the definition_of_ready gate but is logged." },
           },
         },
       },
