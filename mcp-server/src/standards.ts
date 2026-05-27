@@ -101,6 +101,11 @@ export interface AgentStandards {
     scope_expansion?: {
       enabled?: boolean;
     };
+    auth_change_asvs_artifact?: {
+      enabled?: boolean;
+      /** Glob patterns for auth-sensitive paths. Defaults applied in task-tracking.ts. */
+      paths?: string[];
+    };
   };
 }
 

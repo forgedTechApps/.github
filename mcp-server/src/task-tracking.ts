@@ -44,6 +44,18 @@ export interface TaskRecord {
   definition_of_done?: string;
   out_of_scope?: string[];
   size?: "trivial" | "standard" | "large";
+  // ── Auth-change ASVS artifact (Increment 5) ──
+  asvs_review?: AsvsReview;
+}
+
+export interface AsvsReview {
+  /** ASVS L1 control IDs touched, e.g. ["V2.1.1", "V3.4.1"]. */
+  controls_touched: string[];
+  /** What was checked, and how. Free text. */
+  verification: string;
+  /** Who or what reviewed (agent name, person, automated tool). */
+  reviewer: string;
+  attached_at: string;
 }
 
 interface TasksFile {
@@ -316,6 +328,33 @@ export async function proposeChange(
     }
   }
 
+  // ── Auth-change ASVS artifact gate (Increment 5) ─────────────────────────
+  // When enabled, propose_change against any auth-sensitive path requires an
+  // attached asvs_review on the active task. Replaces 'mental review' with
+  // an audit trail.
+  const asvsGate = standards.gates?.auth_change_asvs_artifact?.enabled === true;
+  if (asvsGate && !task.asvs_review) {
+    const defaultAuthPaths = ["**/auth/**", "**/permissions/**", "**/session/**"];
+    const authPaths = standards.gates?.auth_change_asvs_artifact?.paths ?? defaultAuthPaths;
+    const matchedAuthPaths = args.paths.filter((p) =>
+      authPaths.some((pat) => minimatch(p, pat))
+    );
+    if (matchedAuthPaths.length > 0) {
+      findings.push({
+        severity: "error",
+        code: "TASK_AUTH_NO_ASVS_ARTIFACT",
+        message:
+          `Proposed write(s) ${JSON.stringify(matchedAuthPaths)} touch auth paths ` +
+          `(${authPaths.join(", ")}) but task ${id} has no asvs_review attached. ` +
+          `Auth changes require an ASVS L1 review artifact before merge.`,
+        fix:
+          `Call attach_asvs_review({ task_id: '${id}', controls_touched: ['V2.1.1', ...], ` +
+          `verification: '<what you checked, how>', reviewer: '<who/what>' }) before retrying. ` +
+          `ASVS L1 controls list: https://owasp.org/www-project-application-security-verification-standard/`,
+      });
+    }
+  }
+
   // Legacy expected_writes check (kept for non-canary projects without the gate).
   // Suppressed when the scope-expansion gate is firing — it would double-report.
   if (!scopeGate) {
@@ -419,6 +458,74 @@ export async function expandScope(
     files_intended: task.files_intended,
     blocked: false,
     message: `Added '${args.path}' to task ${id}'s files_intended.`,
+  };
+}
+
+// ─── attach_asvs_review ────────────────────────────────────────────────────
+
+export interface AttachAsvsReviewArgs {
+  task_id?: string;
+  controls_touched: string[];
+  verification: string;
+  reviewer: string;
+}
+
+export interface AttachAsvsReviewResult {
+  task_id: string;
+  asvs_review?: AsvsReview;
+  blocked: boolean;
+  message: string;
+}
+
+export async function attachAsvsReview(
+  repoRoot: string,
+  args: AttachAsvsReviewArgs
+): Promise<AttachAsvsReviewResult> {
+  const data = await load(repoRoot);
+  const id = args.task_id ?? data.active_task_id;
+  if (!id) {
+    return {
+      task_id: "",
+      blocked: true,
+      message: "No active task. Call start_task first.",
+    };
+  }
+  const task = data.tasks.find((t) => t.id === id);
+  if (!task) {
+    return {
+      task_id: id,
+      blocked: true,
+      message: `Task ${id} not found.`,
+    };
+  }
+  if (args.controls_touched.length === 0) {
+    return {
+      task_id: id,
+      blocked: true,
+      message:
+        "controls_touched must list at least one ASVS L1 control (e.g. 'V2.1.1' for password length). " +
+        "If the change genuinely doesn't touch any ASVS control, it probably isn't auth-changing — " +
+        "reconsider whether this task needed the gate.",
+    };
+  }
+
+  const review: AsvsReview = {
+    controls_touched: args.controls_touched,
+    verification: args.verification,
+    reviewer: args.reviewer,
+    attached_at: new Date().toISOString(),
+  };
+  task.asvs_review = review;
+  task.notes.push(
+    `[${review.attached_at}] attach_asvs_review: controls=[${review.controls_touched.join(", ")}], reviewer='${review.reviewer}'`
+  );
+  await save(repoRoot, data);
+
+  return {
+    task_id: id,
+    asvs_review: review,
+    blocked: false,
+    message: `ASVS review attached to task ${id}.`,
   };
 }
 

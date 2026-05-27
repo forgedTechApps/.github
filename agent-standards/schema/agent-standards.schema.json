@@ -73,6 +73,19 @@
           "properties": {
             "enabled": { "type": "boolean", "default": false }
           }
+        },
+        "auth_change_asvs_artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Auth-change ASVS artifact gate (Increment 5). When enabled, propose_change against an auth path blocks unless attach_asvs_review has been called on the active task. Artifact records which ASVS L1 controls were touched and what verification was done. Replaces 'mental review' with an audit trail.",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "paths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Glob patterns for auth-sensitive paths. Defaults to ['**/auth/**', '**/permissions/**', '**/session/**']."
+            }
+          }
         }
       }
     },

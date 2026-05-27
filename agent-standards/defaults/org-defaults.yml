@@ -31,6 +31,17 @@ models:
   execution:
     model: sonnet
 
+# ── Workflow gates (org-wide defaults) ──────────────────────────────────────
+# definition_of_ready (Increment 2) + scope_expansion (Increment 3): opt-in
+# per-project (Increment 4 propagated explicitly via project files).
+#
+# auth_change_asvs_artifact (Increment 5): rolled org-wide via this file.
+# Auth changes are too infrequent to canary; the artifact only fires when an
+# auth path is touched, so projects without auth paths see no effect.
+gates:
+  auth_change_asvs_artifact:
+    enabled: true
+
 style:
   # ── Code hygiene (invariants) ──────────────────────────────────────────
   - rule: "No commented-out code in committed changes. Delete it — git history is the archive."
