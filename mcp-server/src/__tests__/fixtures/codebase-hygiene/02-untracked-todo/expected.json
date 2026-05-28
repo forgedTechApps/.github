@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "severity": "warn", "code": "NO_UNTRACKED_TODOS" }
+  ]
+}

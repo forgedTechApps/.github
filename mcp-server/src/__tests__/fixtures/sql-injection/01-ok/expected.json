@@ -1,0 +1,6 @@
+{
+  "exact": true,
+  "findings": [
+    { "severity": "info", "code": "SQLI_OK" }
+  ]
+}

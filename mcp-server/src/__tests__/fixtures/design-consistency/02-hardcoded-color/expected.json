@@ -1,0 +1,9 @@
+{
+  "findings": [
+    {
+      "severity": "warn",
+      "code": "DESIGN_HARDCODED_COLOR",
+      "messageIncludes": "#ff5733"
+    }
+  ]
+}

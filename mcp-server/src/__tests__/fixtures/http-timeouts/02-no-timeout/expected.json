@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "severity": "warn", "code": "HTTP_NO_TIMEOUT" }
+  ]
+}
