@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "severity": "warn", "code": "BRANCH_NO_REMOTE" }
+  ]
+}

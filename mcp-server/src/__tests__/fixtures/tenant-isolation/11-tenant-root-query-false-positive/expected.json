@@ -1,0 +1,15 @@
+{
+  "exact": false,
+  "findings": [
+    {
+      "severity": "error",
+      "code": "TENANT_ISOLATION_MISSING",
+      "messageIncludes": "byId"
+    },
+    {
+      "severity": "error",
+      "code": "TENANT_ISOLATION_MISSING",
+      "messageIncludes": "findByToken"
+    }
+  ]
+}

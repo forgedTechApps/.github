@@ -1,0 +1,52 @@
+name: MCP CI
+
+# Runs the agent-standards MCP server's own test suite on any PR that
+# touches it. This repo exports reusable workflows for *others* — the
+# canonical quality-gate-node.yml expects npm + jest + Sonar + OWASP,
+# none of which the MCP server uses (pnpm + node:test, no coverage).
+# So this is a minimal direct workflow. Adopting the canonical gate
+# would require adding those dependencies — out of scope for now.
+
+on:
+  pull_request:
+    paths:
+      - "mcp-server/**"
+      - ".github/workflows/mcp-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "mcp-server/**"
+      - ".github/workflows/mcp-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm version comes from mcp-server/package.json `packageManager` field.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: mcp-server/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test

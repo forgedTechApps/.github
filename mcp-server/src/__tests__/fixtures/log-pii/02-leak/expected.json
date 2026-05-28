@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "severity": "warn", "code": "LOG_PII", "messageIncludes": "password" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "findings": [
+    {
+      "severity": "error",
+      "code": "ENV_EXAMPLE_INCOMPLETE",
+      "messageIncludes": "SECRET_KEY"
+    }
+  ]
+}

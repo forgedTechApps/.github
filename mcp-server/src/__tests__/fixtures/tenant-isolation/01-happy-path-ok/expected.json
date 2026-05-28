@@ -1,0 +1,10 @@
+{
+  "exact": true,
+  "findings": [
+    {
+      "severity": "info",
+      "code": "TENANT_ISOLATION_OK",
+      "messageIncludes": "All methods accept 'householdId'"
+    }
+  ]
+}

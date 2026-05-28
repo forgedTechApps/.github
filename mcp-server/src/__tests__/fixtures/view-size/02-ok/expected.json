@@ -1,0 +1,6 @@
+{
+  "exact": true,
+  "findings": [
+    { "severity": "info", "code": "VIEW_SIZE_OK" }
+  ]
+}

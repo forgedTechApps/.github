@@ -1,0 +1,9 @@
+{
+  "exact": true,
+  "findings": [
+    {
+      "severity": "info",
+      "code": "TENANT_ISOLATION_OK"
+    }
+  ]
+}

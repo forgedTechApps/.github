@@ -1,0 +1,8 @@
+version: 1
+repo: test/fixture
+language: node
+architecture:
+  tenant_isolation:
+    tenant_id_field: householdId
+    data_layer_paths:
+      - "src/data/households.ts"

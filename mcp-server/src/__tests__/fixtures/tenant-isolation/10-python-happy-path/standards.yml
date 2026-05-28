@@ -1,0 +1,8 @@
+version: 1
+repo: test/fixture
+language: python
+architecture:
+  tenant_isolation:
+    tenant_id_field: user_id
+    data_layer_paths:
+      - "app/services/horoscope.py"

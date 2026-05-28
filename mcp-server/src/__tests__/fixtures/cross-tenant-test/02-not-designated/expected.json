@@ -1,0 +1,6 @@
+{
+  "exact": true,
+  "findings": [
+    { "severity": "warn", "code": "CROSS_TENANT_TEST_NOT_DESIGNATED" }
+  ]
+}
