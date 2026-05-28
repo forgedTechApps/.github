@@ -1,0 +1,10 @@
+{
+  "exact": true,
+  "findings": [
+    {
+      "severity": "error",
+      "code": "TENANT_ISOLATION_MISSING",
+      "messageIncludes": "createMemoryRepos"
+    }
+  ]
+}
