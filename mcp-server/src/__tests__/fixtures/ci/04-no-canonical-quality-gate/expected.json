@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "severity": "error", "code": "CI_NO_CANONICAL_QUALITY_GATE" }
+  ]
+}

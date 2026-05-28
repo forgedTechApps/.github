@@ -1,0 +1,10 @@
+name: CI
+on: [push]
+permissions:
+  contents: read
+jobs:
+  ci:
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-node.yml@v1
+  deploy:
+    needs: [ci]
+    uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1

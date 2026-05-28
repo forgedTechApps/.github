@@ -1,0 +1,9 @@
+{
+  "findings": [
+    {
+      "severity": "warn",
+      "code": "CI_KIND_MISMATCH",
+      "messageIncludes": "mobile"
+    }
+  ]
+}

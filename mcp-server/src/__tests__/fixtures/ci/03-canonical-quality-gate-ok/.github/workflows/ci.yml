@@ -1,0 +1,8 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  ci:
+    uses: forgedTechApps/.github/.github/workflows/quality-gate-node.yml@v1

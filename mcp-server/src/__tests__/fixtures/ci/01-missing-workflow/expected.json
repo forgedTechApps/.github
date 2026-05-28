@@ -1,0 +1,6 @@
+{
+  "exact": true,
+  "findings": [
+    { "severity": "error", "code": "CI_MISSING" }
+  ]
+}

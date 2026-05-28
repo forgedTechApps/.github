@@ -1,0 +1,6 @@
+version: 1
+repo: test/fixture
+language: node
+ci:
+  kind: service
+  deploy_target: railway

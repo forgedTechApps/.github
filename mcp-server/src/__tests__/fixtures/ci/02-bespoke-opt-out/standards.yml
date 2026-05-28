@@ -1,0 +1,7 @@
+version: 1
+repo: test/fixture
+language: node
+ci:
+  kind: service
+  bespoke: true
+  bespoke_reason: "Legacy CircleCI pipeline pending migration."
