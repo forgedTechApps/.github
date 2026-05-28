@@ -2,12 +2,12 @@
   "exact": false,
   "findings": [
     {
-      "severity": "error",
+      "severity": "info",
       "code": "TENANT_ISOLATION_MISSING",
       "messageIncludes": "byId"
     },
     {
-      "severity": "error",
+      "severity": "info",
       "code": "TENANT_ISOLATION_MISSING",
       "messageIncludes": "findByToken"
     }

@@ -126,15 +126,16 @@ export async function checkSqlInjection(repoRoot: string): Promise<Finding[]> {
   }
 
   return allHits.map((h) => ({
-    severity: "error" as const,
+    severity: "warn" as const,
     code: "SQLI_CONCAT",
     message:
       `${h.file}:${h.line}: ${h.pattern}. ` +
       `Preview: ${JSON.stringify(h.preview)}. ` +
-      `String-concatenated SQL is an injection vector.`,
+      `Possible SQL injection — regex hint, not a proof. Many ORMs / query builders accept template strings safely; ` +
+      `the real defense is parameterised queries everywhere, enforced in review.`,
     fix:
-      `Use parameterised queries: '?', $1, :name, or query-builder syntax. ` +
-      `If this is a known-safe pattern (e.g. dynamic column name from a fixed allowlist), ` +
-      `add a trailing comment '// agent-standards: allow-sql-concat <reason>' on the line.`,
+      `If this is a real concat into a raw query, switch to parameterised: '?', $1, :name. ` +
+      `If safe (ORM template, known-safe dynamic column from an allowlist), ` +
+      `add a trailing comment '// agent-standards: allow-sql-concat <reason>' to suppress.`,
   }));
 }

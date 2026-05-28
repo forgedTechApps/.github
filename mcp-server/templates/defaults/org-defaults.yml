@@ -158,13 +158,15 @@ architecture:
         reason: "Generic AST check infeasible. Mitigated via cross-tenant integration test as Invariant."
         issue: "https://github.com/forgedTechApps/.github/issues/7"
 
-    - rule: "Multi-tenant projects: every query function in the data layer accepts the tenant id as a parameter. Configure architecture.tenant_isolation to enable mechanical enforcement."
-      tier: invariant
+    - rule: "Multi-tenant projects: every query function in the data layer accepts the tenant id as a parameter. The mechanical check is a hint (severity: info) — signature heuristics produce too many false positives (row converters, factory functions, tenant-root queries, domain aliases) to use as a blocking gate. The load-bearing defense for cross-tenant leaks is the integration test below (cross_tenant_test_coverage)."
+      tier: practice
       id: multi_tenant_query_isolation
       check_command: "mcp:check_tenant_isolation"
-      severity: error
-      # No-op when architecture.tenant_isolation is unset. Active when configured.
-      # Bypass via inline '// tenant-isolation: bypass <reason>' comment per method.
+      severity: info
+      # No-op when architecture.tenant_isolation is unset. When configured, surfaces
+      # method signatures that don't take the tenant_id_field as a hint, not a block.
+      # Demoted from invariant/error on 2026-05-28 after 100% false-positive rate on
+      # Kurata + ~95% on eleven11v2. See issue #27 for the abandoned heuristics work.
 
     - rule: "Multi-tenant projects: a designated cross-tenant integration test asserts 403 for every authenticated route when called with a foreign tenant ID. The test row count keeps pace with new routes."
       tier: invariant
@@ -184,13 +186,13 @@ architecture:
       # Promote to 'error' after each project cleans up. Bypass via inline
       # '// agent-standards: allow-no-timeout <reason>'.
 
-    - rule: "Logging never includes PII, credentials, tokens, or full request bodies. Mask or omit at the logger, not the call site."
-      tier: invariant
+    - rule: "Logging never includes PII, credentials, tokens, or full request bodies. Mask or omit at the logger, not the call site. The mechanical check is a hint — regex on log statements near sensitive field names produces noise (legitimate user_id logging is fine). Verify findings manually."
+      tier: practice
       id: no_pii_in_logs
       check_command: "mcp:check_log_pii"
-      severity: warn
-      # severity stays at 'warn' during the per-project cleanup-pass window.
-      # Promote to 'error' after each project cleans up. Bypass via inline
+      severity: info
+      # Demoted from invariant/warn on 2026-05-28 — regex flags both real leaks
+      # and harmless cases (opaque ID logging). Suppress via inline
       # '// agent-standards: allow-log-field <reason>'.
 
     # ── Secrets & config ───────────────────────────────────────────────────
@@ -214,13 +216,12 @@ architecture:
       # Run after `pnpm build` / `next build` etc — scans compiled output, not source.
 
     # ── Data integrity ─────────────────────────────────────────────────────
-    - rule: "SQL: parameterised queries only. String concatenation in queries is rejected."
-      tier: invariant
+    - rule: "SQL: parameterised queries only. String concatenation into raw SQL is rejected. The mechanical check is a hint — many ORMs / query builders accept template-string syntax safely, and the regex can't tell the difference. Enforce in code review; rely on CodeQL/Semgrep for depth."
+      tier: practice
       id: parameterised_queries_only
       check_command: "mcp:check_sql_injection"
-      severity: error
-      # Regex catches the 80% case (template literals + SQL concat). Deeper
-      # scanning (CodeQL, Semgrep) belongs in CI. Bypass: '// agent-standards:
+      severity: warn
+      # Demoted from invariant/error on 2026-05-28. Bypass: '// agent-standards:
       # allow-sql-concat <reason>'.
 
     - rule: "Schema migrations are forward-only and reversible (or document why not). Destructive migrations (DROP, NOT NULL on existing) require explicit user approval."
@@ -236,14 +237,15 @@ architecture:
       # downstream effect when DB access bypasses the layer.
 
     # ── HTTP services ──────────────────────────────────────────────────────
-    - rule: "HTTP services set security headers: Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options: nosniff, X-Frame-Options: DENY (or frame-ancestors), Referrer-Policy: strict-origin-when-cross-origin."
-      tier: invariant
+    - rule: "HTTP services set security headers: Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options: nosniff, X-Frame-Options: DENY (or frame-ancestors), Referrer-Policy: strict-origin-when-cross-origin. The textual presence check is a hint — headers are often set by a reverse-proxy, CDN, or framework outside the scanned source."
+      tier: practice
       id: http_security_headers
       check_command: "mcp:check_http_security"
-      severity: warn
-      # Combined with cors_explicit_origins in mcp:check_http_security. Passes
-      # automatically when a known headers library (helmet, fastify-helmet,
-      # django.middleware.security) is detected.
+      severity: info
+      # Demoted from invariant/warn on 2026-05-28. Passes automatically when a
+      # known headers library (helmet, fastify-helmet, django.middleware.security)
+      # is detected. The dangerous-CORS combo remains an invariant — see
+      # cors_explicit_origins below.
 
     - rule: "CORS allowlist is explicit per-origin. No `*` for endpoints that handle credentials."
       tier: invariant

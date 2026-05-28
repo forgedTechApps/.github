@@ -138,14 +138,13 @@ export async function checkLogPii(
   }
 
   return hits.map((h) => ({
-    severity: "warn" as const,
+    severity: "info" as const,
     code: "LOG_PII",
     message:
-      `${h.file}:${h.line}: log statement references sensitive field(s) ${JSON.stringify(h.matchedFields)}. ` +
-      `Preview: ${JSON.stringify(h.preview)}.`,
+      `${h.file}:${h.line}: hint — log statement references potentially-sensitive field(s) ${JSON.stringify(h.matchedFields)}. ` +
+      `Preview: ${JSON.stringify(h.preview)}. Many of these are legitimate (logging an opaque user_id is fine); verify manually.`,
     fix:
-      `Mask or omit the field. Example: 'log.info({ user_id })' instead of 'log.info({ user_id, email })'. ` +
-      `If this log statement is genuinely safe (e.g. logging only the field name as a string, ` +
-      `or a sanitised value), add a trailing comment '// agent-standards: allow-log-field <reason>'.`,
+      `If the value is sensitive (raw email, password, token), mask or omit. ` +
+      `If it's a safe identifier or already masked, add a trailing comment '// agent-standards: allow-log-field <reason>' to suppress.`,
   }));
 }
