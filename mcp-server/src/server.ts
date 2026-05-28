@@ -486,10 +486,10 @@ export function createServer(options: CreateServerOptions = {}): Server {
       {
         name: "run_local_checks",
         description:
-          "One-call aggregator for the standard local checks: ci_setup, branching, secrets, design, hygiene, " +
-          "tenant, bundle (client-bundle secret leak), sqli (string-concat SQL), log_pii, http_timeouts. " +
-          "Use this before committing — closes the gap of having to call each tool individually. " +
-          "Findings are appended to the drift log; query trends with get_drift_log.",
+          "One-call aggregator for all local checks: ci, branching, secrets, design, hygiene, tenant, bundle " +
+          "(client-bundle secret leak), sqli (string-concat SQL), log_pii, http_timeouts, cross_tenant_test, " +
+          "env_example, view_size, http_security. Use this before committing — closes the gap of having to " +
+          "call each tool individually. Findings are appended to the drift log; query trends with get_drift_log.",
         inputSchema: {
           type: "object",
           required: defaultRepoRoot ? [] : ["repo_root"],
@@ -497,8 +497,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
             repo_root: repoRootProp,
             include: {
               type: "array",
-              items: { type: "string", enum: ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts"] },
-              description: "Subset of checks to run. Default: all ten.",
+              items: {
+                type: "string",
+                enum: [
+                  "ci", "branching", "secrets", "design", "hygiene", "tenant",
+                  "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test",
+                  "env_example", "view_size", "http_security",
+                ],
+              },
+              description: "Subset of checks to run. Default: all 14.",
             },
             secrets_scope: { type: "string", enum: ["staged", "tracked", "all"], default: "staged" },
           },
