@@ -2,7 +2,7 @@
   "exact": true,
   "findings": [
     {
-      "severity": "error",
+      "severity": "info",
       "code": "TENANT_ISOLATION_MISSING",
       "messageIncludes": "isWrite"
     }

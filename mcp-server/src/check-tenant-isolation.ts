@@ -283,14 +283,15 @@ export async function checkTenantIsolation(
     for (const h of hits) {
       const paramsOneLine = h.params.replace(/\s+/g, " ").trim().slice(0, 80);
       findings.push({
-        severity: "error",
+        severity: "info",
         code: "TENANT_ISOLATION_MISSING",
         message:
-          `${target.file}:${h.startLine + 1}: method '${h.methodName}(${paramsOneLine})' does not accept '${config.tenant_id_field}' as a parameter. ` +
-          `Multi-tenant invariant: every query in the data layer must scope by tenant.`,
+          `${target.file}:${h.startLine + 1}: hint — method '${h.methodName}(${paramsOneLine})' doesn't take '${config.tenant_id_field}'. ` +
+          `Verify it's intentional (worker scan, anonymised aggregate, pure compute, tenant-establishing query, etc.). ` +
+          `The load-bearing defense for cross-tenant leaks is check_cross_tenant_test — not this signature heuristic.`,
         fix:
-          `Add '${config.tenant_id_field}' to the parameter list and use it in the query filter. ` +
-          `If this method is legitimately tenant-free, add an inline comment '// ${config.bypass_comment_pattern ?? DEFAULT_BYPASS_PATTERN}: <reason>' (or '# ' for Python) on the line above the signature.`,
+          `If this method should be tenant-scoped, add '${config.tenant_id_field}' to the parameter list. ` +
+          `Otherwise no action needed; this is informational. You may suppress via '// ${config.bypass_comment_pattern ?? DEFAULT_BYPASS_PATTERN}: <reason>' if you want a clean run.`,
       });
     }
   }

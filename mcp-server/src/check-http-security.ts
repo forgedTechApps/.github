@@ -112,14 +112,14 @@ export async function checkHttpSecurity(
     }
     if (missingHeaders.length > 0) {
       findings.push({
-        severity: "warn",
+        severity: "info",
         code: "HTTP_SEC_MISSING_HEADERS",
         message:
-          `Required security headers not detected anywhere in source: ${missingHeaders.join(", ")}. ` +
-          `Either wire a headers library (helmet / fastify-helmet) or set them in middleware.`,
+          `Hint — security headers not detected in source: ${missingHeaders.join(", ")}. ` +
+          `A reverse-proxy / CDN / framework might set these at runtime; this is a textual heuristic only.`,
         fix:
-          "Easiest fix: install + register helmet (Express) / @fastify/helmet (Fastify) / django.middleware.security.SecurityMiddleware (Django). " +
-          "Alternative: a single middleware that sets HSTS, CSP, X-Content-Type-Options, X-Frame-Options (or frame-ancestors), Referrer-Policy.",
+          "If genuinely missing, register helmet (Express) / @fastify/helmet (Fastify) / SecurityMiddleware (Django), or a middleware setting HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy. " +
+          "If headers are set by infra outside this repo, no action needed.",
       });
     }
   }
