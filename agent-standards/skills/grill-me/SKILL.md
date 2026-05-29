@@ -64,6 +64,12 @@ better recommendations and a faster interview.
 5. **How will we know it works?** *Recommended: test approach + observable
    outcome. Tests-first if the spec is known; build-then-test if it's
    novel.*
+6. **Is this a vertical slice?** *Recommended: confirm the work cuts
+   end-to-end (UI/API → logic → data) and is demonstrable on its own,
+   rather than building one horizontal layer in isolation. If it's
+   layer-only (e.g. "just the schema", "just the worker"), confirm that's
+   deliberate and the rest of the slice is tracked elsewhere — a layer
+   nobody can exercise defers integration risk to the worst moment.*
 
 ### Bugfix branch (additional)
 

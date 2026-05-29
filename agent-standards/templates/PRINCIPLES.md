@@ -29,6 +29,11 @@ section. Project-specific principles can be appended after the link.
 - **Refactor only after it works.** Make the change pass tests first;
   restructure second. Refactoring mid-feature loses the thread for both the
   agent and the human reviewing it.
+- **Vertical slices over horizontal layers.** Prefer work that goes
+  end-to-end and is demonstrable over building a whole layer that can't be
+  exercised yet. Thin slices surface unknowns early; horizontal layers
+  defer integration risk to the worst moment. The grill-me interview asks
+  this; this principle is the spirit.
 
 ## UI
 
