@@ -90,6 +90,10 @@ style:
     tier: practice
     id: explicit_constraints
 
+  - rule: "Don't `gh pr merge --auto` unless the repo has branch protection with required status checks. Without it, `--auto` merges the instant the PR is mergeable — often before the real test jobs report. Poll the head commit's check-runs until the test jobs report success (`gh run watch <run-id> --exit-status`), then merge manually."
+    tier: practice
+    id: no_auto_merge_without_branch_protection
+
   - rule: "If you (the agent) made a mistake the user had to correct, propose a one-line addition to CLAUDE.md or .agent-standards.yml via propose_claude_md_rule. The user accepts or declines — never auto-edit."
     tier: practice
     id: propose_rule_after_correction
