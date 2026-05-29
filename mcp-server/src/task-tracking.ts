@@ -196,11 +196,23 @@ export async function startTask(
   let blockMessage: string | undefined;
   if (expected && declared && declared !== expected.model) {
     blocked = true;
+    const cost =
+      declared === "opus" && expected.model === "sonnet"
+        ? "You are about to execute on opus — that burns 3–5× the budget of sonnet for work that doesn't need the extra reasoning. Switch."
+        : declared === "sonnet" && expected.model === "opus"
+        ? "You are about to PLAN on sonnet — planning on a smaller model means missed edge cases, shallow design, rework later. Switch."
+        : `Phase '${phase}' is configured for '${expected.model}'; you are running '${declared}'. Switch.`;
     blockMessage =
-      `Phase '${phase}' expects model family '${expected.model}'${expected.effort ? ` (effort: ${expected.effort})` : ""}, ` +
-      `but current_model='${args.current_model}' resolves to '${declared}'. ` +
-      `Dispatch a subagent: Agent({ model: "claude-${expected.model}-...", description: "...", prompt: "..." }). ` +
-      `If you intend to bypass, omit current_model — the MCP can't enforce what isn't declared.`;
+      `❌ WRONG MODEL FOR PHASE — task blocked.\n\n` +
+      `${cost}\n\n` +
+      `Phase: ${phase}\n` +
+      `Required: claude-${expected.model}${expected.effort ? ` (effort: ${expected.effort})` : ""}\n` +
+      `Running: ${args.current_model} (resolves to ${declared})\n\n` +
+      `Fix one of two ways:\n` +
+      `  1. Dispatch a subagent on the right model:\n` +
+      `     Agent({ model: "claude-${expected.model}-...", subagent_type: "...", prompt: "..." })\n` +
+      `  2. Switch the session model yourself (e.g. /model claude-${expected.model}-... in Claude Code), then retry start_task.\n\n` +
+      `Bypass intentionally? Omit current_model — the MCP can't enforce what isn't declared. Doing so silences this gate; the cost asymmetry remains.`;
   }
 
   if (blocked) {
