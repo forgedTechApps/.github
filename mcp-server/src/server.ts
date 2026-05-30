@@ -14,6 +14,7 @@ import { checkCodebaseHygiene } from "./check-codebase-hygiene.js";
 import { checkTenantIsolation } from "./check-tenant-isolation.js";
 import { checkCrossTenantTest } from "./check-cross-tenant-test.js";
 import { checkEnvExample } from "./check-env-example.js";
+import { checkSubscription } from "./check-subscription.js";
 import { checkViewSize } from "./check-view-size.js";
 import { checkHttpSecurity } from "./check-http-security.js";
 import { checkClientBundleSecrets } from "./check-client-bundle-secrets.js";
@@ -104,6 +105,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
   const CheckTenantIsolationArgs = z.object({ repo_root: RepoRoot });
   const CheckCrossTenantTestArgs = z.object({ repo_root: RepoRoot });
   const CheckEnvExampleArgs = z.object({ repo_root: RepoRoot });
+  const CheckSubscriptionArgs = z.object({ repo_root: RepoRoot });
   const CheckViewSizeArgs = z.object({ repo_root: RepoRoot });
   const CheckHttpSecurityArgs = z.object({ repo_root: RepoRoot });
   const CheckClientBundleSecretsArgs = z.object({ repo_root: RepoRoot });
@@ -373,6 +375,21 @@ export function createServer(options: CreateServerOptions = {}): Server {
           "process.env['X'], import.meta.env.X, os.environ['X'], os.environ.get('X'), os.getenv('X'). " +
           "Exempts built-ins (NODE_ENV, PATH, etc.) and public prefixes (NEXT_PUBLIC_, VITE_, " +
           "EXPO_PUBLIC_, REACT_APP_).",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
+        name: "check_subscription",
+        description:
+          "Wiring health check: verifies a project is fully + correctly subscribed to the " +
+          "agent-standards framework. Checks .agent-standards.yml extends org-defaults, CLAUDE.md " +
+          "exists + links the org template, the MCP server is wired in .mcp.json (and NOT duplicated " +
+          "in .claude/settings.json — duplicate config hangs Claude Code on init), the wiring is " +
+          "portable (no absolute /Users paths), grill-me is present, and settings.local.json is " +
+          "gitignored. One call confirms onboarding is correct or surfaces the gap.",
         inputSchema: {
           type: "object",
           required: defaultRepoRoot ? [] : ["repo_root"],
@@ -850,6 +867,14 @@ export function createServer(options: CreateServerOptions = {}): Server {
         const args = CheckEnvExampleArgs.parse(req.params.arguments ?? {});
         const findings = await checkEnvExample(args.repo_root);
         await appendDrift(args.repo_root, "check_env_example", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
+      if (req.params.name === "check_subscription") {
+        const args = CheckSubscriptionArgs.parse(req.params.arguments ?? {});
+        const findings = await checkSubscription(args.repo_root);
+        await appendDrift(args.repo_root, "check_subscription", findings);
         const isError = findings.some((f) => f.severity === "error");
         return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
       }

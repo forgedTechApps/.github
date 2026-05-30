@@ -1,0 +1,4 @@
+version: 1
+extends: forgedtech/org-defaults
+repo: test/fixture
+language: node

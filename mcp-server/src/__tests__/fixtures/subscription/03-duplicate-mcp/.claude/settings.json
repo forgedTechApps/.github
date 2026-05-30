@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agent-standards": {
+      "command": "node",
+      "args": ["${AGENT_STANDARDS_HOME}/mcp-server/dist/index.js"]
+    }
+  }
+}

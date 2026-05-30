@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "severity": "warn", "code": "SUBSCRIPTION_DUPLICATE_MCP_CONFIG" }
+  ]
+}

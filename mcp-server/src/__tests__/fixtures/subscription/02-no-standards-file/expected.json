@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "severity": "warn", "code": "SUBSCRIPTION_NO_STANDARDS_FILE" }
+  ]
+}
