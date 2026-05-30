@@ -119,6 +119,10 @@ style:
     tier: practice
     id: compact_only_for_same_task
 
+  - rule: "Route lightweight output sub-tasks to Haiku by default: annotations, PR comments, commit/PR summaries, changelog lines, status blurbs, and similar mechanical text-generation. When dispatching a subagent for one of these, pin model: haiku (Agent/Task call). This is a model tier BELOW the planning(opus)/execution(sonnet) split — those govern the main task; this governs the cheap output work spun off from it. Override to sonnet only when the sub-task genuinely needs judgment (e.g. summarising a large, subtle diff where a weak summary would mislead) — and say why. Default Haiku; escalate deliberately."
+    tier: practice
+    id: haiku_for_lightweight_subtasks
+
 style_ui:
   # ── UI / component-driven design ────────────────────────────────────────
   # Loaded only when the project's ci.kind is `mobile` or `web`.

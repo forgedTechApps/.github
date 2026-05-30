@@ -31,15 +31,21 @@ Practice or Gate via `propose_claude_md_rule`.
 
 ---
 
-## Model routing — two-phase workflow
+## Model routing — three tiers
 
-This system uses two models on purpose:
+This system routes work across three models on purpose:
 
 - **Planning** → **Opus** (medium effort). Heavy reasoning, hypothesis-first,
   design + architecture decisions, edge cases, scoping. The conversation you're
   reading should be in Opus.
 - **Execution** → **Sonnet**. Writing the planned code, fix loops, mechanical
   refactors, test loops.
+- **Lightweight output** → **Haiku**. Annotations, PR comments, commit/PR
+  summaries, changelog lines, status blurbs — mechanical text generation spun
+  off from the main task. When you dispatch a subagent for one of these, pin
+  `model: "claude-haiku-4-5-20251001"`. Default to Haiku; escalate a specific
+  sub-task to Sonnet only when it genuinely needs judgment (e.g. summarising a
+  large, subtle diff where a weak summary would mislead) — and say why.
 
 ### Concrete IDs (update when models advance)
 
