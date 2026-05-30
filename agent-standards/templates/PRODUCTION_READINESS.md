@@ -7,17 +7,27 @@
 > A correct diff is not a deploy-ready one. Correctness says "it does what it should."
 > Readiness says "we can run it, see it, and undo it." This checklist is the second question.
 
+**Readiness = org rules (already enforced) + the deploy-specific concerns below.**
+The standing security/quality baseline — OWASP Top 10 and ASVS L1 via `check_http_security`,
+`check_secrets`, `check_client_bundle_secrets`, `check_cross_tenant_test`, and the
+`auth_change_asvs_artifact` gate — is enforced by the standards on every change, and is a
+**precondition** here, not something to re-review. Don't duplicate it. This checklist covers
+what *deploying* adds on top: the security deltas that only appear at deploy time, plus
+performance, observability, runbook, and rollback — none of which the org checks cover.
+
 For each item: **pass / N-A / gap**. A gap isn't a veto — it's a thing to fix or to
 consciously accept and note in the deploy message.
 
-## Security
+## Security — deploy-time deltas only
 
-- [ ] No secret, token, or key added to client bundles or committed files (env / secret store only).
-- [ ] New endpoints/queries enforce authn + authz at the boundary (not just client-side gating).
-- [ ] Tenant/owner scoping holds for any new data path (the real defense is the cross-tenant test, not a signature check).
-- [ ] Input validated at the boundary; new external calls bound by timeout + size limits.
-- [ ] No PII / health / credential data added to logs, analytics, crash reports, or AI prompts.
-- [ ] If auth/data/template surface touched: ASVS L1 mental review done (A01–A10).
+The OWASP/ASVS working set is owned by the standards (see above) — assume it's green before
+you get here. This section is the security that's specific to *shipping to a real environment*:
+
+- [ ] Production secrets are actually in the prod secret store — not just listed in `.env.example`, not still pointing at dev/staging values.
+- [ ] Rate-limit / quota profiles are set for **production** traffic, not dev defaults.
+- [ ] Nothing dev-permissive leaks to prod: debug routes, verbose error bodies, seed/test endpoints, wildcard CORS, disabled auth shortcuts.
+- [ ] New external egress (a new API the service now calls in prod) is allowed by network policy and uses prod credentials.
+- [ ] If the deploy includes a migration touching sensitive data, the data-at-rest expectations (encryption, retention) still hold after it runs.
 
 ## Performance
 

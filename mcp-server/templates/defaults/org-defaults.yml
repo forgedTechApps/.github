@@ -103,7 +103,7 @@ style:
     tier: practice
     id: stranger_review
 
-  - rule: "Production-readiness gate for deploy-bound changes: before a change ships to a real environment, walk the readiness checklist (see agent-standards/templates/PRODUCTION_READINESS.md) — security, performance, observability (are new code paths logged + metered?), runbook (how is this operated?), and rollback (how is it undone, and is the change backward-compatible enough to roll back safely?). A correct diff is not the same as a deploy-ready one. Applies only to deploy-bound changes; skip for refactors, tests, and docs. Advisory — surface gaps at review time, don't hard-block."
+  - rule: "Production-readiness gate for deploy-bound changes: readiness = the org rules already enforced (OWASP/ASVS via check_http_security, check_secrets, check_client_bundle_secrets, check_cross_tenant_test, auth_change_asvs_artifact — a precondition, NOT re-reviewed here) PLUS the deploy-specific concerns those checks don't cover. Before shipping to a real environment, walk agent-standards/templates/PRODUCTION_READINESS.md: deploy-time security deltas (prod secrets actually set, prod rate-limits, no dev-permissive leakage), performance under load, observability (are new paths logged + metered?), runbook (how is this operated?), and rollback (how is it undone, and is the change backward-compatible enough to roll back safely?). A correct diff is not a deploy-ready one. Deploy-bound changes only; skip refactors, tests, docs. Advisory — surface gaps at review time, don't hard-block."
     tier: practice
     id: production_readiness_gate
 
