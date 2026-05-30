@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r \".tool_input.command // \\\"\\\"\" | grep -Eq \"gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$).*--auto([[:space:]=]|$)\" && printf \"%s\" '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Blocked: gh pr merge --auto is banned in this repo. No branch protection means --auto merges the instant the PR is mergeable, before CI jobs report. Poll the head commit check-runs until the ci jobs pass, then merge manually. See the merge-gate rule in CLAUDE.md.\"}}' || true"
+          }
+        ]
+      }
+    ]
+  }
+}
