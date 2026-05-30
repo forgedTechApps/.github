@@ -20,6 +20,28 @@ section. Project-specific principles can be appended after the link.
   abstraction. Three similar lines beats a premature factory.
   (The Practice "three uses = extract" is the actionable version.)
 
+## AI / LLM call sites
+
+For projects that call an LLM (most of the suite):
+
+- **LLM call sites are observable.** Every call logs what matters — inputs (or
+  a redacted shape of them), outputs, latency, token counts, and cost — behind
+  the same redaction rules as everything else (no PII/secrets in logs). You
+  cannot operate, debug, or budget what you can't see. This is the first thing
+  that separates a prototype from a product.
+- **There is an objective way to judge output quality.** An eval harness — even
+  a small set of golden input→expected-shape cases — beats "it looked right in
+  testing." LLM behaviour drifts across model versions and prompt edits; evals
+  are the regression test for non-deterministic output.
+- **One chokepoint per provider.** All calls to a given model route through a
+  single client/service (Veda's 4 Claude sites, Kurata's `KurataAgent`), never
+  scattered `messages.create()` across features. The chokepoint is where
+  observability, caching, redaction, and rate-limiting live — once.
+- **Cost is a design input, not an afterthought.** Cache aggressively (prompt
+  caching, result caching), route lightweight work to cheaper models, and know
+  the per-action cost before shipping. (See the Model-routing tiers — the same
+  "cheap work to Haiku" logic applies to the app's own LLM calls.)
+
 ## Scope and refactoring
 
 - **Implement exactly what was requested.** No "while I'm here" refactors.
