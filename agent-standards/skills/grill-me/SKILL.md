@@ -119,6 +119,29 @@ When `task_type: 'auth_change'`:
 The ASVS branch's output feeds `attach_asvs_review` after `start_task`
 returns successfully.
 
+### UI branch (additional)
+
+When the task touches a screen, component, or view (any stack — web,
+mobile, SwiftUI). Reference: [`UI_UX_GUIDELINES.md`](https://github.com/forgedTechApps/.github/blob/main/agent-standards/templates/UI_UX_GUIDELINES.md).
+
+1. **Does this perform a mutation (create/update/delete)?** *If yes, walk
+   the mutation→UI contract: which views show this data, how does each
+   refresh after the write (invalidate/revalidate/context-save), and is it
+   optimistic or pessimistic? A mutation with no refresh path is a
+   stale-screen bug. Include server/realtime caches, not just the query
+   layer.*
+2. **Loading / error / empty — all three handled?** *Every async surface
+   shows progress while loading, a recoverable message on error (Retry,
+   never navigate away), and a designed empty state distinct from both.*
+3. **What feedback does the user get?** *No silent actions — pressed state,
+   progress on submit, visible success AND failure. Destructive actions
+   confirm or offer undo.*
+4. **Does it fit the project's design system + navigation rules?** *Tokens
+   not magic values; the project's router conventions (CLAUDE.md);
+   accessibility floor (contrast, touch targets, semantic labels).*
+
+Skip this branch for non-UI work (pure logic, API, infra).
+
 ## When to call surface_uncertainty
 
 During the interview, if a question can't be resolved by reading code or

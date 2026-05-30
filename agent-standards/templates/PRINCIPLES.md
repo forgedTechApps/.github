@@ -41,6 +41,19 @@ section. Project-specific principles can be appended after the link.
   Communicate via props/inputs and events/callbacks. The mechanical version
   of this is the design-token Invariants (`design_tokens_only`,
   `view_size_limit`); this principle is the spirit.
+- **A mutation owns the screens it changes.** Every create/update/delete
+  must refresh the views that show its data (invalidate / revalidate /
+  context-save) — at every cache layer, not just the query layer. A mutation
+  with no refresh path is a stale-screen bug. The grill-me UI branch asks
+  this; this principle is the spirit.
+- **Every async surface handles loading, error, and empty** — not just the
+  happy path. Errors recover in place; they never navigate the user away.
+
+The broader, durable guidance — mutation→UI contract, state handling,
+feedback, navigation feel, perceived performance, accessibility — lives in
+[`UI_UX_GUIDELINES.md`](UI_UX_GUIDELINES.md). Read it when doing UI work.
+It is guidance, not enforcement: UI quality is judgment, and the session's
+recurring lesson is that mechanically "checking" judgment produces noise.
 
 ---
 
