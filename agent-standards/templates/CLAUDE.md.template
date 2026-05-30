@@ -170,14 +170,47 @@ Make the feature pass tests first. Restructure second. Refactoring
 mid-feature is the most reliable way to lose the thread — both for the agent
 and for the human reviewing it.
 
-## Be explicit about constraints
+## Review before merge — stranger + readiness
 
-In prompts, name the boundary:
-- "Use the existing pattern in `apps/web/lib/foo.ts` — match its shape."
-- "Touch only `services/foo.service.ts` and its test."
-- "No new dependencies."
+Two passes, beyond the diff being correct:
 
-These three sentences alone prevent most over-engineering.
+**Stranger review** (substantial diffs). Before merging, get a fresh-context
+read. Spawn an agent (Task tool) given **only the diff plus the one-line
+requirement** — withhold the plan, the conversation, the intended approach. It
+reports where the code diverges from the stated goal, where it had to guess
+intent, and where a reader who didn't write it would stumble. The point is the
+clean context: a same-context self-review carries the author's intent and
+structurally *cannot* see the gap between what you meant and what you wrote.
+Findings are questions to resolve, not blockers — and a place the stranger had
+to guess is itself a signal the code isn't self-explanatory.
+
+**Production-readiness gate** (deploy-bound changes only). A correct diff is
+not a deploy-ready one. Before shipping to a real environment, walk
+[`PRODUCTION_READINESS.md`](https://github.com/forgedTechApps/.github/blob/main/agent-standards/templates/PRODUCTION_READINESS.md):
+security, performance, observability (are new paths logged + metered?), runbook
+(how is it operated?), rollback (how is it undone, safely?). Skip for
+refactors, tests, docs. Advisory — surface gaps at review time; state the
+readiness posture in the deploy message rather than just "deployed."
+
+## Instructions to an implementing agent — use GCOE
+
+When you hand instructions to an implementing agent (a subagent prompt, or an
+executable plan step), cover four things — **G**oal, **C**onstraints,
+**E**xamples, **O**utput format:
+
+- **Goal** — what "done" looks like, in one sentence. The observable outcome.
+- **Constraints** — what must/must-not change; the pattern to follow; files in
+  scope; "no new dependencies."
+- **Examples** — **paste the concrete existing pattern to mirror.** This is the
+  usual miss. "Follow the existing repository pattern" is far weaker than
+  pasting the existing repository. Show the pattern; don't describe it.
+- **Output format** — the file shape, function signature, or test expectation
+  the result must match.
+
+The Examples line is the highest-leverage one in this codebase, because the
+most common instruction is "match what's already here" — and the cheapest way
+to get that is to show it, not say it. Naming the boundary this way prevents
+most over-engineering and most "that's not how we do it here" rework.
 
 ## Session hygiene
 

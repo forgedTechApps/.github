@@ -70,6 +70,13 @@ better recommendations and a faster interview.
    layer-only (e.g. "just the schema", "just the worker"), confirm that's
    deliberate and the rest of the slice is tracked elsewhere — a layer
    nobody can exercise defers integration risk to the worst moment.*
+7. **What's the pattern to mirror?** *Grep for the closest existing
+   example — the repository, route, widget, or test this should look like —
+   and name it by path. This is the "E" in GCOE (Goal, Constraints,
+   Examples, Output): when the scope is handed to an implementing agent,
+   the concrete example to paste matters more than any description. "Match
+   `apps/web/lib/foo.ts`" beats "follow the existing pattern." If there's
+   genuinely no precedent, say so — that itself is worth surfacing.*
 
 ### Bugfix branch (additional)
 
@@ -161,6 +168,13 @@ attach_asvs_review({
 
 The phase stays `planning` until the user explicitly dispatches execution.
 Don't auto-transition.
+
+**Carry the pattern-to-mirror forward.** `start_task` has no dedicated field
+for the example reference (branch 7), so fold it into `scope_statement` —
+e.g. "…mirroring the shape of `apps/web/lib/foo.ts`." When you later dispatch
+an implementing subagent, paste that example into the prompt (GCOE's "E").
+Naming the pattern in the interview but dropping it before execution wastes
+the most useful thing the interview produced.
 
 ## During execution: expand_scope
 

@@ -98,6 +98,19 @@ style:
     tier: practice
     id: propose_rule_after_correction
 
+  # ── Review & readiness (practices) ─────────────────────────────────────
+  - rule: "Stranger review for substantial diffs: before merging, run a fresh-context review. Spawn an agent (Task tool) given ONLY the diff plus the one-line requirement — withhold the plan, the conversation, and the intended approach. It reports where the code diverges from the stated goal, where it had to guess intent, and where a reader who didn't write it would stumble. The point is the clean context: a same-context self-review carries the author's intent and structurally cannot catch the intent-vs-code gap. Findings are questions to resolve, not blockers."
+    tier: practice
+    id: stranger_review
+
+  - rule: "Production-readiness gate for deploy-bound changes: before a change ships to a real environment, walk the readiness checklist (see agent-standards/templates/PRODUCTION_READINESS.md) — security, performance, observability (are new code paths logged + metered?), runbook (how is this operated?), and rollback (how is it undone, and is the change backward-compatible enough to roll back safely?). A correct diff is not the same as a deploy-ready one. Applies only to deploy-bound changes; skip for refactors, tests, and docs. Advisory — surface gaps at review time, don't hard-block."
+    tier: practice
+    id: production_readiness_gate
+
+  - rule: "GCOE instructions: when handing instructions to an implementing agent (a subagent prompt, or an executable plan step), cover Goal (what done looks like), Constraints (what must/must-not change, patterns to follow), Examples (paste the concrete existing pattern to mirror — do NOT just describe it), and Output format (file shape, function signature, test expectation). Examples is the usual miss: 'follow the existing repository pattern' is far weaker than pasting the existing repository. Show the pattern; don't describe it."
+    tier: practice
+    id: gcoe_instructions
+
   # ── Token / context discipline (practices) ─────────────────────────────
   - rule: "Find before reading. Use Grep / search for symbols and keywords first. Don't Read whole files when a targeted range or rg search will answer the question."
     tier: practice
