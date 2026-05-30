@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "agent-standards": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/Users/someone/Development/forgedtech/mcp-server/dist/index.js", "--repo-root", "/Users/someone/Development/test"]
+    }
+  }
+}

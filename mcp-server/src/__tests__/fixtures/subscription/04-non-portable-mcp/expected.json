@@ -1,0 +1,5 @@
+{
+  "findings": [
+    { "severity": "warn", "code": "SUBSCRIPTION_MCP_NOT_PORTABLE" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "agent-standards": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${AGENT_STANDARDS_HOME}/mcp-server/dist/index.js", "--repo-root", "${PWD}"]
+    }
+  }
+}
