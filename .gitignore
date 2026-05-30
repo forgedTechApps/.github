@@ -9,3 +9,7 @@ node_modules
 # proposed-rules are meant to be reviewed and committed when accepted.
 
 .agent-state/
+
+# Claude Code — commit settings.json (shared hooks/config), ignore personal + transient
+.claude/settings.local.json
+.claude/*.lock
