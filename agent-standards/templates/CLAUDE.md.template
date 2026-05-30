@@ -190,6 +190,12 @@ structurally *cannot* see the gap between what you meant and what you wrote.
 Findings are questions to resolve, not blockers — and a place the stranger had
 to guess is itself a signal the code isn't self-explanatory.
 
+(Model note: the stranger reviewer does *reasoning* — run it on the execution
+or planning tier, not Haiku. Haiku is for the mechanical output that may follow
+— formatting the findings into PR comments, writing the summary line — per the
+lightweight-output routing in "Model routing" above. Route the judgment to a
+capable model; route the typing-up to Haiku.)
+
 **Production-readiness gate** (deploy-bound changes only). A correct diff is
 not a deploy-ready one. Before shipping to a real environment, walk
 [`PRODUCTION_READINESS.md`](https://github.com/forgedTechApps/.github/blob/main/agent-standards/templates/PRODUCTION_READINESS.md):
