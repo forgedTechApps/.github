@@ -4,9 +4,9 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "/Users/dev/Development/forgedtech/mcp-server/dist/index.js",
+        "${AGENT_STANDARDS_HOME}/mcp-server/dist/index.js",
         "--repo-root",
-        "/Users/dev/Development/forgedtech",
+        "${PWD}",
         "--name",
         "agent-standards/forgedtech-meta"
       ]
