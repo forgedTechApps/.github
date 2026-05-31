@@ -88,10 +88,48 @@ on:
         required: false
 
 jobs:
+  # ── Linux job: lint + dependency scan (×1) ──────────────────────────────
+  # SwiftLint (Linux Docker image) and osv-scanner (Linux-native) don't need
+  # Xcode/macOS. Running them on ubuntu keeps the ×10 macOS runner doing only
+  # what genuinely requires it (compile + simulator test). Saves ~2-4 min ×10
+  # per run. (issue: org-wide CI minute reduction)
+  lint-scan:
+    name: Lint + Dependency Scan (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ── Gate 1: SwiftLint (Linux via official Docker image) ─────────────
+      - name: SwiftLint
+        if: inputs.run-swiftlint
+        uses: docker://ghcr.io/realm/swiftlint:latest
+        with:
+          args: swiftlint lint --strict --config ${{ inputs.working-directory }}/.swiftlint.yml
+
+      # ── Gate 2: OSV dependency scan (Package.resolved) ──────────────────
+      - name: OSV dependency scan
+        run: |
+          if [ ! -f "Package.resolved" ]; then
+            echo "No Package.resolved found — skipping OSV scan"
+            exit 0
+          fi
+          curl -sSfL "https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64" -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+          osv-scanner --lockfile=Package.resolved
+
   quality-gate:
     name: Quality Gate (Swift/iOS)
     runs-on: macos-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -106,7 +144,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # Shallow by default; SonarCloud blame wants full history, so deepen
+          # only when Sonar runs. Full clone on the ×10 runner is pure waste otherwise.
+          fetch-depth: ${{ inputs.run-sonar && 0 || 1 }}
 
       - name: Select Xcode ${{ inputs.xcode-version }}
         uses: maxim-lobanov/setup-xcode@v1
@@ -116,35 +156,18 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      # ── Gate 1: SwiftLint ───────────────────────────────────────────────
-      # Zero errors, zero warnings — enforced
-      - name: SwiftLint
-        if: inputs.run-swiftlint
-        run: |
-          if which swiftlint > /dev/null; then
-            swiftlint lint --strict
-          else
-            echo "SwiftLint not installed — installing via Homebrew"
-            brew install swiftlint
-            swiftlint lint --strict
-          fi
-
-      # ── Gate 2: Audit Swift Package dependencies ────────────────────────
-      # Checks Package.resolved against the OSV vulnerability database.
-      # Only runs if Package.resolved exists — projects without SPM deps skip this.
-      - name: OSV dependency scan
-        run: |
-          if [ ! -f "Package.resolved" ]; then
-            echo "No Package.resolved found — skipping OSV scan"
-            exit 0
-          fi
-          if which osv-scanner > /dev/null 2>&1; then
-            osv-scanner --lockfile=Package.resolved
-          else
-            echo "Installing osv-scanner..."
-            brew install osv-scanner
-            osv-scanner --lockfile=Package.resolved
-          fi
+      # ── Cache SPM dependencies + resolved source packages ───────────────
+      # Avoids re-fetching + re-compiling every SPM dependency on the ×10
+      # runner each run. Keyed on Package.resolved. Highest-ROI macOS change.
+      - name: Cache SPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
 
       # ── Gate 3: Resolve SPM dependencies ────────────────────────────────
       - name: Resolve Swift Package dependencies

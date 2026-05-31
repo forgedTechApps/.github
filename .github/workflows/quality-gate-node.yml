@@ -39,9 +39,9 @@ on:
         required: false
 
       run-owasp:
-        description: 'Run OWASP Dependency-Check (disable for speed in dev branches)'
+        description: 'Run OWASP Dependency-Check per-PR. Default false — the deep OWASP+NVD scan runs weekly in security-scan.yml; per-PR relies on the fast native `npm audit`. Set true only where per-PR deep scanning is genuinely needed.'
         type: boolean
-        default: true
+        default: false
         required: false
 
       run-sonar:
@@ -125,7 +125,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # Shallow by default; deepen only for SonarCloud blame.
+          fetch-depth: ${{ inputs.run-sonar && 0 || 1 }}
 
       - name: Setup Node.js ${{ inputs.node-version }}
         uses: actions/setup-node@v4
