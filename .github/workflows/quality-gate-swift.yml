@@ -109,16 +109,16 @@ jobs:
           fetch-depth: 1
 
       # ── Gate 1: SwiftLint (Linux via official Docker image) ─────────────
-      # The realm/swiftlint image's ENTRYPOINT is already `swiftlint`, so the
-      # docker `args:` must be the ARGUMENTS only (passing `swiftlint lint …`
-      # there runs `swiftlint swiftlint lint …`). The repo mounts at the
-      # container workdir; pass the working-directory as the lint path so a
-      # nested .swiftlint.yml is picked up relative to it.
+      # The realm/swiftlint image ENTRYPOINT is already `swiftlint`, so `args:`
+      # is arguments only. Pass `--config <wd>/.swiftlint.yml` and NO path: a
+      # bare path overrides the config's `included:` and finds nothing
+      # ("No lintable files found at paths: '.'"). The config's own included/
+      # excluded paths then drive what's linted, relative to the mounted repo.
       - name: SwiftLint
         if: inputs.run-swiftlint
         uses: docker://ghcr.io/realm/swiftlint:latest
         with:
-          args: lint --strict ${{ inputs.working-directory }}
+          args: lint --strict --config ${{ inputs.working-directory }}/.swiftlint.yml
 
       # ── Gate 2: OSV dependency scan (Package.resolved) ──────────────────
       - name: OSV dependency scan
