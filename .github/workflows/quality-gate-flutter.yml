@@ -53,6 +53,12 @@ on:
         default: false
         required: false
 
+      run-owasp:
+        description: 'Run OWASP Dependency-Check per-PR. Default false — deep OWASP+NVD runs weekly in security-scan.yml. Dart CVE coverage is partial regardless.'
+        type: boolean
+        default: false
+        required: false
+
       build-android:
         description: 'Run Android build check'
         type: boolean
@@ -102,7 +108,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # Shallow by default; deepen only for SonarCloud blame.
+          fetch-depth: ${{ inputs.run-sonar && 0 || 1 }}
 
       - name: Setup Flutter ${{ inputs.flutter-version }}
         uses: subosito/flutter-action@v2
@@ -146,6 +153,7 @@ jobs:
       # Scans pubspec.lock for known vulnerabilities.
       # Note: Dart ecosystem CVE coverage is less complete than npm/PyPI.
       - name: OWASP Dependency-Check
+        if: inputs.run-owasp
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: ${{ github.repository }}
@@ -160,7 +168,7 @@ jobs:
 
       - name: Upload OWASP report
         uses: actions/upload-artifact@v4
-        if: always()
+        if: inputs.run-owasp && always()
         with:
           name: dependency-check-${{ github.run_id }}
           path: ${{ inputs.working-directory }}/reports/dependency-check
