@@ -112,7 +112,10 @@ jobs:
           cache: true
 
       - name: Flutter pub get
-        run: flutter pub get
+        # --enforce-lockfile makes the install reproducible: it fails here (with
+        # a clear message) if the committed pubspec.lock is stale, instead of
+        # silently mutating the lock and tripping the codegen diff below.
+        run: flutter pub get --enforce-lockfile
 
       # ── Gate 1: Code generation check ──────────────────────────────────
       # Ensures generated files (.g.dart, .freezed.dart) are up to date.
@@ -120,7 +123,10 @@ jobs:
       - name: Verify generated files are up to date
         run: |
           flutter pub run build_runner build --delete-conflicting-outputs
-          git diff --exit-code || (
+          # Scope the diff to generated files only — a whole-tree `git diff`
+          # conflates real codegen drift with incidental changes (e.g. a
+          # pubspec.lock re-resolution) and mislabels them as stale codegen.
+          git diff --exit-code -- '*.g.dart' '*.freezed.dart' '*.gr.dart' '*.config.dart' || (
             echo "❌ Generated files are out of date."
             echo "Run: flutter pub run build_runner build --delete-conflicting-outputs"
             echo "Then commit the changes."
@@ -255,7 +261,7 @@ jobs:
           cache: true
 
       - name: Flutter pub get
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign --no-pub
