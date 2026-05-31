@@ -1,0 +1,6 @@
+{
+  "exact": true,
+  "findings": [
+    { "severity": "error", "code": "CROSS_TENANT_TEST_EMPTY" }
+  ]
+}

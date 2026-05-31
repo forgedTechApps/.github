@@ -1,0 +1,15 @@
+version: 1
+repo: test/fixture
+language: node
+architecture:
+  tenant_isolation:
+    tenant_id_field: orgId
+    data_layer_paths:
+      - "src/data/repos.ts"
+    cross_tenant_test_file: "src/routes/cross-tenant.test.ts"
+    route_files:
+      - "src/routes/**/*.ts"
+    # auth routes are pre-tenant-context — exclude them from the denominator
+    # so the parity ratio reflects only tenant-scoped routes (issue #33).
+    route_files_exclude:
+      - "src/routes/auth/**"

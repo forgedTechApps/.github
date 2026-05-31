@@ -1,0 +1,6 @@
+{
+  "exact": true,
+  "findings": [
+    { "severity": "info", "code": "CROSS_TENANT_TEST_UNDER_COVERAGE" }
+  ]
+}

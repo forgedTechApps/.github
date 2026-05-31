@@ -203,6 +203,11 @@
               "type": "array",
               "items": { "type": "string" },
               "description": "Glob patterns for route files. Used by check_cross_tenant_test to count authenticated routes for parity. Defaults to heuristic if unset."
+            },
+            "route_files_exclude": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Glob patterns for route files matched by route_files but intentionally NOT tenant-scoped (auth, onboarding, self-service, API-key-scoped). Excluded from the check_cross_tenant_test denominator so the parity ratio reflects only tenant-scoped routes."
             }
           }
         }
