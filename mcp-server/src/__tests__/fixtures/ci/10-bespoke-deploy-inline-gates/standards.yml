@@ -1,0 +1,9 @@
+version: 1
+repo: test/fixture
+language: node
+ci:
+  kind: service
+  deploy_target: railway
+  bespoke: true
+  bespoke_reason: >-
+    pnpm monorepo; inline pnpm gate jobs instead of canonical quality-gate-node.yml.

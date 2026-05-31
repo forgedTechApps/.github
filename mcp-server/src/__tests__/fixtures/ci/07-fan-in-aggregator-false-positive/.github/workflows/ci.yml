@@ -1,11 +1,12 @@
 # Fan-in aggregator pattern. The real test jobs are ci-api / ci-shared / ci-web-e2e.
 # `ci` is a transitive aggregator. `deploy-prod` needs [ci], which transitively requires
 # all three quality gates. Issue #26 (https://github.com/forgedTechApps/.github/issues/26):
-# check_ci_setup should walk needs: recursively. CURRENT-BEHAVIOR: fires false positive.
+# check_ci_setup walks needs: recursively, so deploy-prod resolves to a quality gate. EXPECTED: clean.
 name: CI
 on: [push]
 permissions:
   contents: read
+  issues: write
 jobs:
   ci-api:
     uses: forgedTechApps/.github/.github/workflows/quality-gate-node.yml@v1
