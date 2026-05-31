@@ -1,9 +1,6 @@
 {
+  "exact": true,
   "findings": [
-    {
-      "severity": "error",
-      "code": "CI_DEPLOY_WITHOUT_NEEDS_CI",
-      "messageIncludes": "deploy-prod"
-    }
+    { "severity": "info", "code": "CI_OK" }
   ]
 }

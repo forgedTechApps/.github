@@ -1,0 +1,27 @@
+# Bespoke CI (mirrors Kurata): inline pnpm gate jobs instead of canonical
+# quality-gate-*.yml calls, deploy gates on a fan-in aggregator. Because the
+# gate jobs aren't identifiable by `uses:`, CI_DEPLOY_WITHOUT_NEEDS_CI is
+# skipped for bespoke repos (issue #26) — only CI_BESPOKE_OPT_IN is expected.
+name: CI
+on: [push]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  ci-api:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm --filter api test
+  ci-web:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm --filter web test
+  ci:
+    needs: [ci-api, ci-web]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "CI gates all green"
+  deploy-prod:
+    needs: [ci]
+    if: needs.ci.result == 'success'
+    uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1

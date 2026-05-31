@@ -1,0 +1,22 @@
+# True positive THROUGH an aggregator: deploy-prod needs [bundle], bundle needs [build],
+# and neither bundle nor build is (nor transitively reaches) a canonical quality-gate job.
+# The recursive walk must NOT mask this — CI_DEPLOY_WITHOUT_NEEDS_CI should still fire.
+# Guards the #26 fix against over-correcting (silencing a genuine missing gate).
+name: CI
+on: [push]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "compile"
+  bundle:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "package artifact"
+  deploy-prod:
+    needs: [bundle]
+    uses: forgedTechApps/.github/.github/workflows/deploy-railway.yml@v1

@@ -169,24 +169,52 @@ export async function checkCiSetup(
     });
   }
 
-  // Deploy jobs must depend on CI.
+  // Deploy jobs must depend on CI — directly OR transitively through a fan-in
+  // aggregator (e.g. deploy needs [ci], ci needs [ci-api, ci-shared]). Walk the
+  // needs: graph rather than only the deploy's direct needs (issue #26).
+  //
+  // Bespoke repos run inline gate jobs (named anything, no canonical `uses:`),
+  // so we can't identify which jobs are the quality gates — `ciJobNames` is
+  // empty and any walk would false-positive. The bespoke_reason already
+  // documents the deploy gating, so skip this rule for bespoke CI (issue #26).
   const ciJobNames = new Set(qgJobs.map(([n]) => n));
-  for (const [name, job] of jobEntries) {
-    const isDeploy =
-      name.startsWith("deploy") ||
-      job.uses?.includes("deploy-railway.yml") ||
-      job.uses?.includes("deploy-vercel.yml");
-    if (!isDeploy) continue;
+  const skipDeployNeedsCheck = standards.ci?.bespoke === true;
+  const needsOf = (jobName: string): string[] => {
+    const n = jobs[jobName]?.needs;
+    return Array.isArray(n) ? n : n ? [n] : [];
+  };
+  // True if `start` transitively depends on any quality-gate job. A visited set
+  // bounds the walk against cyclic/self-referential needs: a pure cycle reaches
+  // no gate and correctly returns false (still flags).
+  const reachesQualityGate = (start: string): boolean => {
+    const visited = new Set<string>();
+    const stack = [...needsOf(start)];
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      if (ciJobNames.has(cur)) return true;
+      stack.push(...needsOf(cur));
+    }
+    return false;
+  };
 
-    const needs = Array.isArray(job.needs) ? job.needs : job.needs ? [job.needs] : [];
-    const dependsOnCi = needs.some((n) => ciJobNames.has(n));
-    if (!dependsOnCi) {
-      findings.push({
-        severity: "error",
-        code: "CI_DEPLOY_WITHOUT_NEEDS_CI",
-        message: `Deploy job '${name}' does not depend on a quality-gate job. Tests can be skipped before deploy.`,
-        fix: `Add 'needs: [${[...ciJobNames].join(", ") || "ci"}]' to job '${name}'.`,
-      });
+  if (!skipDeployNeedsCheck) {
+    for (const [name, job] of jobEntries) {
+      const isDeploy =
+        name.startsWith("deploy") ||
+        job.uses?.includes("deploy-railway.yml") ||
+        job.uses?.includes("deploy-vercel.yml");
+      if (!isDeploy) continue;
+
+      if (!reachesQualityGate(name)) {
+        findings.push({
+          severity: "error",
+          code: "CI_DEPLOY_WITHOUT_NEEDS_CI",
+          message: `Deploy job '${name}' does not depend (directly or transitively) on a quality-gate job. Tests can be skipped before deploy.`,
+          fix: `Add a quality-gate job to '${name}'s needs: chain, e.g. 'needs: [${[...ciJobNames].join(", ") || "ci"}]'.`,
+        });
+      }
     }
   }
 

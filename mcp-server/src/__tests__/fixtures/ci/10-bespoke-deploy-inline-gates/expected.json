@@ -1,0 +1,6 @@
+{
+  "exact": true,
+  "findings": [
+    { "severity": "info", "code": "CI_BESPOKE_OPT_IN" }
+  ]
+}
