@@ -132,11 +132,19 @@ export async function checkCrossTenantTest(
   }
 
   // 2. Count authenticated routes.
+  // Exclude (a) test/spec/helper/mock/fixture files and editor/backup junk —
+  // these aren't live route source, and (b) route files the project declares
+  // as intentionally non-tenant-scoped via route_files_exclude (auth,
+  // onboarding, self-service). Both keep the denominator to genuinely
+  // tenant-scoped routes so the parity ratio is meaningful (issue #33).
   const routeGlobs = config.route_files ?? DEFAULT_ROUTE_GLOBS;
+  const excludeGlobs = config.route_files_exclude ?? [];
+  const NON_SOURCE = /(?:\.test\.|\.spec\.|test_|[-.]helpers?\.|[-.]mocks?\.|[-.]fixtures?\.|\.bak$|~$)/;
   const allFiles = await listTrackedFiles(repoRoot);
   const routeFiles = allFiles.filter((f) =>
     routeGlobs.some((g) => minimatch(f, g)) &&
-    !/(?:\.test\.|\.spec\.|test_)/.test(f)
+    !NON_SOURCE.test(f) &&
+    !excludeGlobs.some((g) => minimatch(f, g))
   );
 
   let routeCount = 0;
@@ -204,16 +212,23 @@ export async function checkCrossTenantTest(
         `authenticated route handlers were detected. The file must assert 403 for foreign tenant IDs.`,
     });
   } else if (ratio < 0.8) {
+    // Hint, not a gate. The ratio compares two heuristic counts (regex-matched
+    // route handlers vs 403 assertions / a parameterised sentinel), so it can
+    // drift on either side — a low ratio is a prompt to look, not proof of a
+    // gap. The load-bearing signal is CROSS_TENANT_TEST_EMPTY (binary: routes
+    // exist, file asserts no 403 at all), which stays an error. (issue #33)
     findings.push({
-      severity: "warn",
+      severity: "info",
       code: "CROSS_TENANT_TEST_UNDER_COVERAGE",
       message:
         `${assertionCount} 403 assertion(s) in ${config.cross_tenant_test_file} vs ${routeCount} ` +
-        `authenticated route handler(s) detected. New routes may have been added without test rows. ` +
-        `(20% slack applied; ratio: ${ratio.toFixed(2)}, threshold 0.80.)`,
+        `authenticated route handler(s) detected — worth checking whether new routes were added ` +
+        `without test rows. Both sides are heuristic counts; ratio ${ratio.toFixed(2)} (threshold 0.80). ` +
+        `If a route file is intentionally not tenant-scoped, list it in tenant_isolation.route_files_exclude.`,
       fix:
-        "Add a row to the parameterised test for each new authenticated route. If a single row " +
-        "legitimately covers multiple routes via parameterisation, that's fine — the check only warns.",
+        "Add a row to the parameterised test for each new tenant-scoped route, OR exclude non-tenant " +
+        "route files via tenant_isolation.route_files_exclude. A single row covering multiple routes " +
+        "via parameterisation is fine — this is an info hint, not a blocker.",
     });
   } else {
     findings.push({

@@ -163,6 +163,13 @@ export interface TenantIsolationConfig {
    * unset.
    */
   route_files?: string[];
+  /**
+   * Globs for route files matched by route_files but intentionally NOT
+   * tenant-scoped — auth (pre-tenant-context), onboarding, self-service
+   * (/me), or API-key-scoped routes. Excluded from the cross_tenant_test
+   * denominator so the parity ratio reflects only tenant-scoped routes.
+   */
+  route_files_exclude?: string[];
 }
 
 export interface ModelSpec {

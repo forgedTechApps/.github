@@ -197,6 +197,14 @@ architecture:
       # Active when architecture.tenant_isolation.cross_tenant_test_file is set.
       # The mechanical proxy for OWASP A01 — generic AST check for resource-level
       # authorisation is impractical, so we verify the test inventory grows.
+      #
+      # Severity split (issue #33): the check distinguishes a binary, load-bearing
+      # case from a fuzzy one. CROSS_TENANT_TEST_EMPTY (routes exist but the file
+      # asserts no 403 at all) is an ERROR. CROSS_TENANT_TEST_UNDER_COVERAGE (the
+      # assertion/route ratio is low) is an INFO hint, not a gate — both sides are
+      # heuristic counts, so a low ratio is a prompt to look, not proof of a gap.
+      # Use tenant_isolation.route_files_exclude to drop non-tenant route files
+      # (auth, onboarding, self-service) from the denominator.
 
     - rule: "External HTTP calls must set explicit timeouts and have a documented failure mode (retry, circuit-break, fallback). No bare unbounded fetch()."
       tier: invariant
