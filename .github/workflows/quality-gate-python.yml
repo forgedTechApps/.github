@@ -181,7 +181,6 @@ jobs:
             -f json \
             -o bandit-report.json \
             -ll \
-            --severity-level medium \
             || true
           python3 -c "
           import json, sys
