@@ -112,6 +112,10 @@ style:
     id: gcoe_instructions
 
   # ── Token / context discipline (practices) ─────────────────────────────
+  - rule: "Output discipline: during investigation/execution be terse — tool calls carry the work, at most one short framing sentence per batch. No play-by-play, no recapping tool output that's already visible, no narrating transient tool/harness glitches (silently retry). Reserve fuller prose for genuine decisions/tradeoffs and the final result. Pair with verify-then-act, one step at a time: don't batch commit/push/merge before confirming each step from real output. The SessionStart hook re-asserts this each session."
+    tier: practice
+    id: output_discipline
+
   - rule: "Find before reading. Use Grep / search for symbols and keywords first. Don't Read whole files when a targeted range or rg search will answer the question."
     tier: practice
     id: find_before_read

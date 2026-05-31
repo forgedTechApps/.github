@@ -13,6 +13,14 @@ We eat our own dog food: plan-before-code, three-tier model routing (Opus plan /
 execute / Haiku lightweight output), tests ship with the change, stranger review +
 production-readiness for substantial/deploy-bound changes, GCOE for agent instructions.
 
+**Output discipline (strict).** During investigation and execution, be terse — let tool
+calls carry the work, with at most one short framing sentence per batch. No play-by-play
+("Let me check…"), no recapping tool output that's already visible, no narrating transient
+tool/harness glitches (silently retry). Reserve fuller prose for genuine decisions/tradeoffs
+and the final result. Pair this with **verify-then-act, one step at a time**: don't batch
+commit→push→merge before confirming each step from real output — premature batching produces
+both wrong claims and noise. A `UserPromptSubmit` hook re-asserts this each turn.
+
 ## Principles
 
 See [`agent-standards/templates/PRINCIPLES.md`](agent-standards/templates/PRINCIPLES.md)

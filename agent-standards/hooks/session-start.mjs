@@ -113,6 +113,12 @@ const context =
   `\n` +
   `Two-phase workflow: planning happens on \`${planningModel}\`, execution dispatched as a \`${executionModel}\` subagent.\n` +
   `Honour-system: the MCP can only verify model family if the agent declares \`current_model\` on \`start_task\` and \`propose_change\`.\n` +
+  `\n` +
+  `**Output discipline:** during investigation/execution be terse — tool calls carry the work, ` +
+  `at most one short framing sentence per batch. No play-by-play, no recapping tool output that's ` +
+  `already visible, no narrating transient tool/harness glitches (silently retry). Reserve fuller ` +
+  `prose for genuine decisions/tradeoffs and the final result. Verify-then-act, one step at a time — ` +
+  `don't batch commit/push/merge before confirming each step from real output.\n` +
   activeBlock;
 
 process.stdout.write(JSON.stringify({ additionalContext: context }));
