@@ -6,6 +6,7 @@ name: CI
 on: [push]
 permissions:
   contents: read
+  issues: write
 jobs:
   ci-api:
     uses: forgedTechApps/.github/.github/workflows/quality-gate-node.yml@v1
