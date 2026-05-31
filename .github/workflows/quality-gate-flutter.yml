@@ -167,8 +167,13 @@ jobs:
 
       - name: Check unit coverage threshold
         run: |
-          LINES_HIT=$(grep -c "^DA:[0-9]*,1" coverage/lcov.info 2>/dev/null || echo 0)
-          LINES_TOTAL=$(grep -c "^DA:" coverage/lcov.info 2>/dev/null || echo 1)
+          # Sum lcov's own per-file LH:/LF: (lines-hit / lines-found) totals.
+          # The previous `grep -c "^DA:[0-9]*,1"` only matched lines whose
+          # execution count *starts with 1* — it missed every line hit 2-9, or
+          # 20-99, etc. times, roughly halving the reported coverage.
+          LINES_HIT=$(grep "^LH:" coverage/lcov.info | cut -d: -f2 | paste -sd+ - | bc)
+          LINES_TOTAL=$(grep "^LF:" coverage/lcov.info | cut -d: -f2 | paste -sd+ - | bc)
+          LINES_TOTAL=${LINES_TOTAL:-1}
           COVERAGE=$(echo "scale=1; $LINES_HIT * 100 / $LINES_TOTAL" | bc)
           echo "Unit coverage: ${COVERAGE}% (threshold: ${{ inputs.unit-coverage-threshold }}%)"
           if (( $(echo "$COVERAGE < ${{ inputs.unit-coverage-threshold }}" | bc -l) )); then
@@ -194,8 +199,11 @@ jobs:
       - name: Check integration coverage threshold
         if: inputs.run-integration-tests
         run: |
-          LINES_HIT=$(grep -c "^DA:[0-9]*,1" coverage/lcov-integration.info 2>/dev/null || echo 0)
-          LINES_TOTAL=$(grep -c "^DA:" coverage/lcov-integration.info 2>/dev/null || echo 1)
+          # Sum lcov's own LH:/LF: totals (see unit-coverage note above re: the
+          # previous DA-prefix grep undercounting lines hit >1 / 2-9 times).
+          LINES_HIT=$(grep "^LH:" coverage/lcov-integration.info | cut -d: -f2 | paste -sd+ - | bc)
+          LINES_TOTAL=$(grep "^LF:" coverage/lcov-integration.info | cut -d: -f2 | paste -sd+ - | bc)
+          LINES_TOTAL=${LINES_TOTAL:-1}
           COVERAGE=$(echo "scale=1; $LINES_HIT * 100 / $LINES_TOTAL" | bc)
           echo "Integration coverage: ${COVERAGE}% (threshold: ${{ inputs.integration-coverage-threshold }}%)"
           if (( $(echo "$COVERAGE < ${{ inputs.integration-coverage-threshold }}" | bc -l) )); then
