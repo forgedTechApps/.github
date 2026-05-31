@@ -95,6 +95,20 @@ models:
     effort: high
 ```
 
+## Output discipline
+
+During investigation and execution, be terse — let tool calls carry the work,
+with at most one short framing sentence per batch. No play-by-play
+("Let me check…"), no recapping tool output that's already visible, no
+narrating transient tool/harness glitches (silently retry). Reserve fuller
+prose for genuine decisions/tradeoffs and the final result.
+
+Pair this with **verify-then-act, one step at a time**: don't batch
+commit→push→merge before confirming each step from real output. Premature
+batching produces both wrong claims (citing a SHA or a "passing" suite you
+didn't actually read) and noise. The `SessionStart` hook re-asserts this each
+session.
+
 ## Plan before code
 
 For any non-trivial change:
