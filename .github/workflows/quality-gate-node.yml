@@ -123,13 +123,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Shallow by default; deepen only for SonarCloud blame.
           fetch-depth: ${{ inputs.run-sonar && 0 || 1 }}
 
       - name: Setup Node.js ${{ inputs.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ inputs.node-version }}
           cache: npm
@@ -166,7 +166,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
 
       - name: Upload OWASP report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: inputs.run-owasp && always()
         with:
           name: dependency-check-${{ github.run_id }}
@@ -204,7 +204,7 @@ jobs:
           check_name: 'Unit Test Results'
 
       - name: Upload unit coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: unit-coverage-${{ github.run_id }}
@@ -240,7 +240,7 @@ jobs:
           check_name: 'Integration Test Results'
 
       - name: Upload integration coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: integration-coverage-${{ github.run_id }}
@@ -307,7 +307,7 @@ jobs:
           fi
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: steps.build.outcome == 'success'
         with:
           name: build-${{ github.run_id }}

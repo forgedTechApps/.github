@@ -104,7 +104,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -147,7 +147,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Shallow by default; SonarCloud blame wants full history, so deepen
           # only when Sonar runs. Full clone on the ×10 runner is pure waste otherwise.
@@ -165,7 +165,7 @@ jobs:
       # Avoids re-fetching + re-compiling every SPM dependency on the ×10
       # runner each run. Keyed on Package.resolved. Highest-ROI macOS change.
       - name: Cache SPM
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
@@ -292,7 +292,7 @@ jobs:
           echo "✅ UI/integration coverage ${COVERAGE}% meets threshold"
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results-${{ github.run_id }}

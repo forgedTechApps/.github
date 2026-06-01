@@ -101,20 +101,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Shallow by default; deepen only for SonarCloud blame.
           fetch-depth: ${{ inputs.run-sonar && 0 || 1 }}
 
       - name: Setup .NET ${{ inputs.dotnet-version }}
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
       # Cache NuGet packages so `dotnet restore` doesn't re-download every run.
       # Keyed on lockfiles when present, falling back to project files.
       - name: Cache NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}
@@ -156,7 +156,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
 
       - name: Upload OWASP report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: inputs.run-owasp && always()
         with:
           name: dependency-check-${{ github.run_id }}
@@ -211,7 +211,7 @@ jobs:
           echo "✅ Unit coverage ${COVERAGE}% meets threshold"
 
       - name: Upload unit coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: unit-coverage-${{ github.run_id }}
@@ -257,7 +257,7 @@ jobs:
           echo "✅ Integration coverage ${COVERAGE}% meets threshold"
 
       - name: Upload integration coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: inputs.run-integration-tests && always()
         with:
           name: integration-coverage-${{ github.run_id }}
