@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Pre-push: run the test suite before code leaves the machine (blocking).
+# Heavier than pre-commit; catches test failures before they cost CI minutes.
+set -euo pipefail
+
+echo "▶ pre-push: mcp-server test suite"
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm --filter ./mcp-server test
+else
+  echo "⚠ pnpm not found — skipping tests (install pnpm to enable)" >&2
+fi
+echo "✓ pre-push passed"

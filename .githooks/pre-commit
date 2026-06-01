@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Pre-commit: fast, blocking local checks so broken commits never reach CI
+# (saves GitHub Actions minutes). Lint + typecheck only — NOT tests (pre-push
+# runs those). Enable once per clone: git config core.hooksPath .githooks
+set -euo pipefail
+
+echo "▶ pre-commit: lint + typecheck (mcp-server)"
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm --filter ./mcp-server lint
+else
+  echo "⚠ pnpm not found — skipping typecheck (install pnpm to enable)" >&2
+fi
+echo "✓ pre-commit passed"

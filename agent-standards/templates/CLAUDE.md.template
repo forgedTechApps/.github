@@ -238,6 +238,22 @@ most common instruction is "match what's already here" — and the cheapest way
 to get that is to show it, not say it. Naming the boundary this way prevents
 most over-engineering and most "that's not how we do it here" rework.
 
+## Local pre-flight (save CI minutes)
+
+Every check that can run locally should fail locally first — a failure caught
+on your machine costs zero GitHub Actions minutes; the same failure on CI costs
+real minutes (×10 on macOS runners). Each repo commits git hooks under
+`.githooks/`, enabled once per clone with `git config core.hooksPath .githooks`:
+
+- **pre-commit** — the fast checks (lint, format, typecheck): `swiftlint lint`,
+  `dart format`/`flutter analyze`, `tsc --noEmit`, `eslint`. Blocking. Not tests.
+- **pre-push** — the test suite. Blocking, before code leaves the machine.
+
+Hooks degrade gracefully if a tool isn't installed, and `--no-verify` bypasses
+them for genuine WIP checkpoints (the CI gate still enforces). This is the
+complement to the reusable quality-gate workflows: pre-flight stops *avoidable*
+CI runs; the gates make the *unavoidable* ones cheap.
+
 ## Session hygiene
 
 - **Start a fresh Claude Code session for each new task.** Old context drags
