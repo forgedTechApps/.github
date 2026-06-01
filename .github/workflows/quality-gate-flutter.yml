@@ -106,7 +106,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Shallow by default; deepen only for SonarCloud blame.
           fetch-depth: ${{ inputs.run-sonar && 0 || 1 }}
@@ -167,7 +167,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
 
       - name: Upload OWASP report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: inputs.run-owasp && always()
         with:
           name: dependency-check-${{ github.run_id }}
@@ -197,7 +197,7 @@ jobs:
           echo "✅ Unit coverage ${COVERAGE}% meets threshold"
 
       - name: Upload unit coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: unit-coverage-${{ github.run_id }}
@@ -227,7 +227,7 @@ jobs:
           echo "✅ Integration coverage ${COVERAGE}% meets threshold"
 
       - name: Upload integration coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: inputs.run-integration-tests && always()
         with:
           name: integration-coverage-${{ github.run_id }}
@@ -248,7 +248,7 @@ jobs:
         run: flutter build apk --release --no-pub
 
       - name: Upload Android build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: inputs.build-android
         with:
           name: android-build-${{ github.run_id }}
@@ -267,7 +267,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Flutter ${{ inputs.flutter-version }}
         uses: subosito/flutter-action@v2
