@@ -1,5 +1,5 @@
 ---
-name: grill-me
+name: interview-me
 description: stub
 ---
 stub

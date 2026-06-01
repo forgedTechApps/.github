@@ -135,7 +135,7 @@ The app should *feel* fast even when it isn't:
 
 ## How to use this
 
-- **Planning UI work:** the grill-me interview's UI branch walks the high-risk items here (the
+- **Planning UI work:** the interview-me interview's UI branch walks the high-risk items here (the
   mutation→UI contract especially). Answer them before writing code.
 - **Reviewing UI work:** these are the questions a stranger reviewer asks of a UI diff — "what does
   this show while loading / on error / when empty? what refreshes after this mutation?"

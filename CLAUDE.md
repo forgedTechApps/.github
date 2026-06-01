@@ -27,9 +27,9 @@ See [`agent-standards/templates/PRINCIPLES.md`](agent-standards/templates/PRINCI
 (functions do one thing, scope discipline, vertical slices, LLM observability, …). Note the
 "AI / LLM call sites" section applies to the MCP server's own provider usage if any is added.
 
-## grill-me overrides (the standards repo)
+## interview-me overrides (the standards repo)
 
-The canonical grill-me skill lives here (`agent-standards/skills/grill-me/`). It applies to
+The canonical interview-me skill lives here (`agent-standards/skills/interview-me/`). It applies to
 work in this repo too. In addition to the universal branches, the interview MUST ask:
 
 - **"Does this change a check's severity or tier?"** Demoting/promoting a check (invariant ↔
@@ -43,7 +43,7 @@ work in this repo too. In addition to the universal branches, the interview MUST
   JSON Schema, and `run_local_checks`'s `include` enum in sync (they have drifted before).
 - **"Does this add a mechanical check?"** Default to NO. The session's hard-won lesson: a check
   that fires on judgment (needs an AST or domain knowledge) produces noise and trains people to
-  ignore findings. Judgment-heavy concerns go to grill-me branches, principles, or guidelines —
+  ignore findings. Judgment-heavy concerns go to interview-me branches, principles, or guidelines —
   not checks. A new check must be binary, low-false-positive, and load-bearing.
 - **"Does this require a `v1` tag bump?"** If so, it lands in every product repo immediately —
   coordinate before pushing.
@@ -61,7 +61,7 @@ mcp-server/           The agent-standards MCP server (@forgedtech/agent-standard
   src/__tests__/      Fixture-based test harness (one dir per case + expected.json)
   templates/defaults/ org-defaults.yml — the org-wide rules every .agent-standards.yml extends
 agent-standards/
-  skills/grill-me/    Canonical grill-me skill (symlinked into every project)
+  skills/interview-me/    Canonical interview-me skill (symlinked into every project)
   templates/          CLAUDE.md.template, PRINCIPLES.md, PRODUCTION_READINESS.md, UI_UX_GUIDELINES.md, SETUP.md
   schema/             .agent-standards.yml JSON Schema
   hooks/              session-start / pre-compact hooks
