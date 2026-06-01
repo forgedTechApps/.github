@@ -19,7 +19,7 @@ import type { Finding } from "./check-ci.js";
  *      (known footgun; see memory feedback_mcp_config_no_duplicates).
  *   5. MCP wiring is portable — uses ${AGENT_STANDARDS_HOME}, not an absolute
  *      /Users|/home path that breaks on a teammate's machine.
- *   6. The grill-me skill is present (`.claude/skills/grill-me`).
+ *   6. The interview-me skill is present (`.claude/skills/interview-me`).
  *   7. `.gitignore` ignores `.claude/settings.local.json` (the personal file).
  *
  * Findings are warn (a project can function with a gap, but shouldn't ship
@@ -121,14 +121,14 @@ export async function checkSubscription(repoRoot: string): Promise<Finding[]> {
     });
   }
 
-  // 6. grill-me skill present
-  const grillMe = await exists(join(repoRoot, ".claude/skills/grill-me/SKILL.md"));
-  if (!grillMe) {
+  // 6. interview-me skill present
+  const interviewMe = await exists(join(repoRoot, ".claude/skills/interview-me/SKILL.md"));
+  if (!interviewMe) {
     findings.push({
       severity: "warn",
-      code: "SUBSCRIPTION_NO_GRILL_ME",
-      message: "grill-me skill not found at .claude/skills/grill-me — the planning interview won't be available.",
-      fix: "Symlink the canonical skill: ln -s <forgedtech>/agent-standards/skills/grill-me .claude/skills/grill-me",
+      code: "SUBSCRIPTION_NO_INTERVIEW_ME",
+      message: "interview-me skill not found at .claude/skills/interview-me — the planning interview won't be available.",
+      fix: "Symlink the canonical skill: ln -s <forgedtech>/agent-standards/skills/interview-me .claude/skills/interview-me",
     });
   }
 
@@ -150,7 +150,7 @@ export async function checkSubscription(repoRoot: string): Promise<Finding[]> {
     findings.push({
       severity: "info",
       code: "SUBSCRIPTION_OK",
-      message: "Project is correctly wired: standards extend org-defaults, CLAUDE.md present, MCP wired (single source, portable), grill-me available, gitignore hygiene ok.",
+      message: "Project is correctly wired: standards extend org-defaults, CLAUDE.md present, MCP wired (single source, portable), interview-me available, gitignore hygiene ok.",
     });
   }
 

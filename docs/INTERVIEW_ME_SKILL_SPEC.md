@@ -1,6 +1,6 @@
-# grill-me Skill — Spec (SHIPPED)
+# interview-me Skill — Spec (SHIPPED)
 
-**Status:** **Shipped 2026-05-27** as Increment 8.5 (prereqs) + skill install. Canonical skill lives at `agent-standards/skills/grill-me/SKILL.md`. Canary install on eleven11v2 via symlink to `.claude/skills/grill-me`.
+**Status:** **Shipped 2026-05-27** as Increment 8.5 (prereqs) + skill install. Canonical skill lives at `agent-standards/skills/interview-me/SKILL.md`. Canary install on eleven11v2 via symlink to `.claude/skills/interview-me`.
 
 **What shipped vs this spec:** the broad strokes match. Concrete drift:
 - `task_type` field added to `start_task` directly (spec proposed it as a separate concept). Same effect.
@@ -23,8 +23,8 @@ Two prerequisite MCP tools were missing — `surface_uncertainty` and `bugfix_ro
 
 After completing Increment 5 (auth-change ASVS artifact gate), the spec below was proposed for immediate implementation. We chose to defer for these reasons:
 
-- The full grill-me skill targets four MCP tools; only two-and-a-half exist today (DoR ✅, scope_expansion ✅ but post-start_task not in-interview, auth_change_asvs_artifact ✅ for the auth branch, bugfix_root_cause ❌, surface_uncertainty ❌).
-- A scoped pilot (option 1) was considered and rejected on the grounds of sequence purity: shipping the skill twice (scoped → full) risks the second pass being deprioritised because "we already have grill-me." Better to ship once, properly.
+- The full interview-me skill targets four MCP tools; only two-and-a-half exist today (DoR ✅, scope_expansion ✅ but post-start_task not in-interview, auth_change_asvs_artifact ✅ for the auth branch, bugfix_root_cause ❌, surface_uncertainty ❌).
+- A scoped pilot (option 1) was considered and rejected on the grounds of sequence purity: shipping the skill twice (scoped → full) risks the second pass being deprioritised because "we already have interview-me." Better to ship once, properly.
 - The intervening period (W6–W9) collects baseline data on how DoR fields are filled *without* the interview pattern. That data justifies the skill's value when it ships, and confirms whether `surface_uncertainty` is actually load-bearing or speculative.
 - Higher-priority security work (Kurata tenant-isolation, W7–W8) takes precedence over workflow improvements.
 
@@ -49,11 +49,11 @@ After completing Increment 5 (auth-change ASVS artifact gate), the spec below wa
 
 ## Full Spec (verbatim, as proposed 2026-05-27)
 
-# `grill-me` skill — forgedTechApps adaptation
+# `interview-me` skill — forgedTechApps adaptation
 
 **Purpose.** Implement the `definition_of_ready` gate as a structured planning
 conversation rather than a form-filling exercise. Adapted from Matt Pocock's
-viral `grill-me` skill, wired into the existing MCP tools.
+viral `interview-me` skill, wired into the existing MCP tools.
 
 **Scope.** This document specifies the skill file, the org-default version,
 project-specific overrides for the sensitive trio (Kurata, TradingBot, Veda),
@@ -79,7 +79,7 @@ Before the spec itself, I want to be explicit:
 - The **trigger phrasing** in the description is calibrated to be "pushy enough
   to fire when it should" per the skill-creator guidance, but Claude Code's
   triggering behaviour varies — expect to iterate this once it's in use.
-- I'm **uncertain** how grill-me's interview style interacts with your
+- I'm **uncertain** how interview-me's interview style interacts with your
   two-phase model routing in practice. Theoretically it lines up (planning =
   opus = thoughtful interview); in practice the conversation length may push
   context limits in ways worth measuring.
@@ -91,37 +91,37 @@ Before the spec itself, I want to be explicit:
 ```
 .claude/
 └── skills/
-    └── grill-me/
+    └── interview-me/
         └── SKILL.md
 ```
 
-Per-project overrides live in the project's own `.claude/skills/grill-me/` if
+Per-project overrides live in the project's own `.claude/skills/interview-me/` if
 they need different behaviour, but the recommended pattern is to keep
 overrides in the project's `CLAUDE.md` (which the skill reads at runtime)
 rather than fork the skill file.
 
 ---
 
-## The skill file: `.claude/skills/grill-me/SKILL.md`
+## The skill file: `.claude/skills/interview-me/SKILL.md`
 
 This is the org-default version. Drop into the org's shared
 `.claude/skills/` directory or vendor into each project.
 
 ```markdown
 ---
-name: grill-me
+name: interview-me
 description: |
   Interview the user relentlessly about a plan, design, or bugfix until a
   shared understanding is reached, walking down each branch of the decision
   tree. Use this skill whenever the user wants to start a non-trivial task,
-  needs to define scope before coding, mentions "grill me", asks to "plan
+  needs to define scope before coding, mentions "interview me", asks to "plan
   this out", proposes a change with unclear boundaries, or says anything like
   "let's build/design/fix X". This is the standard entry point for the
   definition_of_ready gate — non-trivial tasks must go through this before
   start_task can transition to execution phase.
 ---
 
-# Grill Me — definition-of-ready conversation
+# Interview Me — definition-of-ready conversation
 
 This skill exists because most agent mistakes are scope mistakes. The plan
 was vague, "done" was never defined, and the agent drifted. This skill
@@ -140,7 +140,7 @@ task is one that:
 For trivial tasks, the user can declare `size: trivial` when calling
 `start_task` and skip this skill. The skip is logged.
 
-Everything else goes through grill-me first.
+Everything else goes through interview-me first.
 
 ## The interview pattern
 
@@ -314,9 +314,9 @@ forking the skill.
 ### Kurata `CLAUDE.md` addendum
 
 ```markdown
-## grill-me overrides (Kurata)
+## interview-me overrides (Kurata)
 
-In addition to the standard interview branches, grill-me MUST ask:
+In addition to the standard interview branches, interview-me MUST ask:
 
 - "Does this touch any cross-household query path?"
 - "What's the householdId filter strategy? (recommend: tenant-isolation
@@ -335,9 +335,9 @@ household data, no receipts, no briefing, no FairShare logic, no auth."
 ### TradingBot `CLAUDE.md` addendum
 
 ```markdown
-## grill-me overrides (TradingBot)
+## interview-me overrides (TradingBot)
 
-In addition to the standard interview branches, grill-me MUST ask:
+In addition to the standard interview branches, interview-me MUST ask:
 
 - "Does this touch the domain layer? (it depends on nothing else — confirm)"
 - "Does this touch OrderService? (the only place orders are placed)"
@@ -353,9 +353,9 @@ Strict mode is on. Trivial bypass not available for any task touching:
 ### Veda `CLAUDE.md` addendum
 
 ```markdown
-## grill-me overrides (Veda)
+## interview-me overrides (Veda)
 
-In addition to the standard interview branches, grill-me MUST ask:
+In addition to the standard interview branches, interview-me MUST ask:
 
 - "Does this involve a Claude call site? (only 4 exist — confirm which)"
 - "Does this touch the domain? (must stay pure — no IO, no side effects)"
@@ -365,7 +365,7 @@ In addition to the standard interview branches, grill-me MUST ask:
   language)"
 
 Strict mode is on. No auto-deploy to Cloudflare or App Store —
-grill-me explicitly confirms the user is not assuming deployment.
+interview-me explicitly confirms the user is not assuming deployment.
 
 Trivial bypass not available for any task touching:
 `claude/`, `paywall/`, `vitruvian/`, `domain/`.
@@ -417,7 +417,7 @@ expand_scope(
 )
 ```
 
-The skill mentions this in its "what this does NOT do" section: grill-me
+The skill mentions this in its "what this does NOT do" section: interview-me
 doesn't pre-emptively expand scope; it produces a tight `files_intended`
 list and lets `expand_scope` handle additions during execution.
 
@@ -449,11 +449,11 @@ attach_asvs_review(
   task_id: <current>,
   controls_touched: <list of ASVS L1 control IDs>,
   verification: <what was checked, how>,
-  reviewer: "grill-me-interview" | <human reviewer name>
+  reviewer: "interview-me-interview" | <human reviewer name>
 )
 ```
 
-Note: `reviewer: "grill-me-interview"` is the agent-driven case. The
+Note: `reviewer: "interview-me-interview"` is the agent-driven case. The
 auth_change_asvs_artifact gate may require a human reviewer for certain
 control changes — that's a project-config decision, not a skill decision.
 
@@ -531,19 +531,19 @@ Calling out the speculative parts honestly:
   is longer because it's tied to the gate fields. Worth experimenting with
   collapsing branches if the conversation feels bureaucratic.
 
-- **The interaction between grill-me and Claude Code's natural conversation
+- **The interaction between interview-me and Claude Code's natural conversation
   flow.** Claude Code will sometimes start coding before the user has
   finished talking. The skill description tries to prevent that with the
   trigger phrasing, but it may need a more explicit `// DO NOT WRITE CODE
   YET` marker. I'd rather see it in practice before adding that.
 
-- **Whether `domain-model` should replace or supplement grill-me.** The
+- **Whether `domain-model` should replace or supplement interview-me.** The
   latest Pocock guidance is to use domain-model as the primary planning
-  skill, with grill-me as a lighter alternative. For your framework, the
+  skill, with interview-me as a lighter alternative. For your framework, the
   domain-model approach (grounding in CLAUDE.md, ADRs, ubiquitous
   language) is probably the better long-term fit, but it's more work to
   build and requires conventions you may not have yet. Starting with
-  grill-me adapted as above is the pragmatic move; promote to a
+  interview-me adapted as above is the pragmatic move; promote to a
   domain-model variant once you see what's missing.
 
 - **The trigger description's phrasing.** Per skill-creator guidance, it

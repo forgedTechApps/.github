@@ -1,38 +1,38 @@
 ---
 name: to-prd
 description: |
-  Turn an explored idea or a grill-me interview into a Product Requirements
+  Turn an explored idea or a interview-me interview into a Product Requirements
   Document — filed as a GitHub issue (or a docs/prd/ file). Use when the user
   says "write a PRD", "turn this into a spec", "document these requirements",
-  or after a grill-me/brainstorm has surfaced enough to crystallise. Produces a
+  or after a interview-me/brainstorm has surfaced enough to crystallise. Produces a
   durable requirements artifact, not code.
 ---
 
 # To-PRD — crystallise requirements into a durable artifact
 
 A conversation explores; a PRD commits. This skill takes the shared
-understanding from a grill-me interview or a brainstorm and writes it down as a
+understanding from a interview-me interview or a brainstorm and writes it down as a
 Product Requirements Document — the durable contract the work is judged against.
 
-**It pairs with grill-me and to-issues.** grill-me interviews until the scope is
+**It pairs with interview-me and to-issues.** interview-me interviews until the scope is
 clear → **to-prd** writes the requirements → to-issues decomposes them into
 buildable slices. Each stage skips redundant work if the previous one was done
 thoroughly.
 
 ## When to use
 
-- After grill-me or brainstorming, when the idea is understood well enough to
+- After interview-me or brainstorming, when the idea is understood well enough to
   document.
 - When the user wants a spec/PRD before implementation.
 - When a piece of work is big enough that "just build it" would lose the thread
   — a PRD is the anchor.
 
-Skip it for small, well-understood changes — a grill-me scope statement is
+Skip it for small, well-understood changes — a interview-me scope statement is
 enough; a PRD would be ceremony.
 
 ## Process
 
-1. **Start from what exists.** If a grill-me interview just ran, reuse its
+1. **Start from what exists.** If a interview-me interview just ran, reuse its
    outputs (goal, scope, out-of-scope, files). Don't re-interview. If not, ask
    the user for a detailed description first.
 2. **Explore the repo to ground claims.** Validate that referenced routes,
@@ -84,8 +84,8 @@ posture if this is deploy-bound.>
 
 - It doesn't write code. The PRD is the whole job.
 - It doesn't invent requirements the user didn't agree to — if the scope is
-  unclear, that's a grill-me gap; go back and interview, don't guess.
-- It doesn't duplicate a grill-me scope for a small task — use judgment about
+  unclear, that's a interview-me gap; go back and interview, don't guess.
+- It doesn't duplicate a interview-me scope for a small task — use judgment about
   when a full PRD earns its weight.
 
 ## Next

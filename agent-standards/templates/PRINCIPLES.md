@@ -54,7 +54,7 @@ For projects that call an LLM (most of the suite):
 - **Vertical slices over horizontal layers.** Prefer work that goes
   end-to-end and is demonstrable over building a whole layer that can't be
   exercised yet. Thin slices surface unknowns early; horizontal layers
-  defer integration risk to the worst moment. The grill-me interview asks
+  defer integration risk to the worst moment. The interview-me interview asks
   this; this principle is the spirit.
 
 ## UI
@@ -66,7 +66,7 @@ For projects that call an LLM (most of the suite):
 - **A mutation owns the screens it changes.** Every create/update/delete
   must refresh the views that show its data (invalidate / revalidate /
   context-save) — at every cache layer, not just the query layer. A mutation
-  with no refresh path is a stale-screen bug. The grill-me UI branch asks
+  with no refresh path is a stale-screen bug. The interview-me UI branch asks
   this; this principle is the spirit.
 - **Every async surface handles loading, error, and empty** — not just the
   happy path. Errors recover in place; they never navigate the user away.

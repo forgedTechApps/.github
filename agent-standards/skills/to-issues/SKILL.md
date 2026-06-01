@@ -14,7 +14,7 @@ A PRD describes the destination; issues are the journey. This skill turns a PRD
 (or a clear spec) into a set of GitHub issues an agent can pick up and build —
 each a **thin vertical slice** that cuts end-to-end, not a horizontal layer.
 
-**It completes the pipeline:** grill-me (interview) → to-prd (requirements) →
+**It completes the pipeline:** interview-me (interview) → to-prd (requirements) →
 **to-issues** (buildable slices).
 
 ## When to use
@@ -22,12 +22,12 @@ each a **thin vertical slice** that cuts end-to-end, not a horizontal layer.
 - After to-prd, to turn the PRD into tickets.
 - When a user has a clear spec and wants it decomposed into work items.
 
-Skip it when the work is a single slice already — one grill-me scope is the
+Skip it when the work is a single slice already — one interview-me scope is the
 issue; decomposing it adds overhead.
 
 ## The core principle: vertical slices, not horizontal layers
 
-This is the whole point, and it's an org principle (PRINCIPLES.md, the grill-me
+This is the whole point, and it's an org principle (PRINCIPLES.md, the interview-me
 vertical-slice branch). **Each issue should cut through all layers** — UI/API →
 logic → data — and be demonstrable on its own. NOT "do all the schema", then
 "do all the API", then "do all the UI" (horizontal layers defer integration risk
@@ -90,5 +90,5 @@ demonstrable when it's done.>
 
 ## Next
 
-Each issue is now a grill-me-able unit: pick one up, run the interview against
+Each issue is now a interview-me-able unit: pick one up, run the interview against
 its acceptance criteria, build the slice, verify, merge. The pipeline closes.

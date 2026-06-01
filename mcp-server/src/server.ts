@@ -388,7 +388,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
           "agent-standards framework. Checks .agent-standards.yml extends org-defaults, CLAUDE.md " +
           "exists + links the org template, the MCP server is wired in .mcp.json (and NOT duplicated " +
           "in .claude/settings.json — duplicate config hangs Claude Code on init), the wiring is " +
-          "portable (no absolute /Users paths), grill-me is present, and settings.local.json is " +
+          "portable (no absolute /Users paths), interview-me is present, and settings.local.json is " +
           "gitignored. One call confirms onboarding is correct or surfaces the gap.",
         inputSchema: {
           type: "object",
@@ -701,7 +701,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
           "strict mode (gates.surface_uncertainty.default_mode='block' or the project listed in " +
           "strict_mode_projects), propose_change blocks until each uncertainty is resolved. To " +
           "resolve, call again with resolve: { description: '<the original description>', " +
-          "resolution: '<what was decided>' }. Required by the grill-me skill when an interview " +
+          "resolution: '<what was decided>' }. Required by the interview-me skill when an interview " +
           "question can't be resolved by user clarification or codebase reading.",
         inputSchema: {
           type: "object",

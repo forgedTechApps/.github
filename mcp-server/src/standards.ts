@@ -16,7 +16,7 @@ import schema from "../../agent-standards/schema/agent-standards.schema.json" wi
  *   1 — Initial version (introduced after Increment 11 + Beyond-W15
  *       cash-up). Covers all 25 MCP tools, all 5 workflow gates, all
  *       rule-metrics infrastructure, hooks (SessionStart + PreCompact),
- *       grill-me skill. Code-complete baseline.
+ *       interview-me skill. Code-complete baseline.
  */
 export const CURRENT_FRAMEWORK_VERSION = 1;
 

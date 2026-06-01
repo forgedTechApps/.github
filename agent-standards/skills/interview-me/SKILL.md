@@ -1,16 +1,16 @@
 ---
-name: grill-me
+name: interview-me
 description: |
   Interview the user about a plan, design, or bugfix until you can produce a
   concrete scope with files, test approach, and explicit "out of scope" list.
   Use this skill at the start of any non-trivial task — features, bug fixes,
   architectural changes, auth changes. Also use when the user says "let's
-  build/design/fix X", "plan this", "grill me", or proposes a change with
+  build/design/fix X", "plan this", "interview me", or proposes a change with
   unclear boundaries. Trivial single-file edits skip the skill via
   size='trivial' on start_task.
 ---
 
-# Grill Me — definition-of-ready interview
+# Interview Me — definition-of-ready interview
 
 Most agent mistakes are scope mistakes. The plan was vague, "done" was
 never defined, the file list was a guess, and the agent drifted. This
@@ -18,7 +18,7 @@ skill prevents that by making planning a conversation you lead.
 
 ## When to use
 
-Run grill-me at the start of any task that is **not** trivial. Trivial = single
+Run interview-me at the start of any task that is **not** trivial. Trivial = single
 file, obvious behaviour, no architectural decision, no security implication.
 For trivial tasks, the user can call `start_task` with `size: 'trivial'` and
 skip the interview; the bypass is logged.
@@ -185,7 +185,7 @@ If `task_type === 'auth_change'`, after `start_task` returns successfully:
 attach_asvs_review({
   controls_touched: [...ASVS L1 IDs from interview...],
   verification: "<what was checked, how>",
-  reviewer: "grill-me-interview"
+  reviewer: "interview-me"
 })
 ```
 
@@ -235,8 +235,8 @@ threshold needs tuning.
 
 ## Sensitive-project overrides
 
-If the project has additional grill-me rules in its CLAUDE.md (search for
-"grill-me overrides"), apply them on top of the universal branches.
+If the project has additional interview-me rules in its CLAUDE.md (search for
+"interview-me overrides"), apply them on top of the universal branches.
 Examples:
 
 - **Kurata**: must ask about cross-household paths, receipts, briefing,
