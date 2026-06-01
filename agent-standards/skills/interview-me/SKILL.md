@@ -122,7 +122,13 @@ returns successfully.
 ### UI branch (additional)
 
 When the task touches a screen, component, or view (any stack — web,
-mobile, SwiftUI). Reference: [`UI_UX_GUIDELINES.md`](https://github.com/forgedTechApps/.github/blob/main/agent-standards/templates/UI_UX_GUIDELINES.md).
+mobile, SwiftUI). Reference: [`UI_UX_GUIDELINES.md`](https://github.com/forgedTechApps/.github/blob/main/agent-standards/templates/UI_UX_GUIDELINES.md)
+(cross-cutting UI contracts). For mobile/native work also walk
+[`MOBILE_GUIDELINES.md`](https://github.com/forgedTechApps/.github/blob/main/agent-standards/templates/MOBILE_GUIDELINES.md)
+(touch targets, safe areas, platform split, lifecycle, on-device sensitive data).
+For web work walk [`WEB_GUIDELINES.md`](https://github.com/forgedTechApps/.github/blob/main/agent-standards/templates/WEB_GUIDELINES.md)
+(Core Web Vitals, RSC/hydration, server-authoritative validation, no secrets in
+the client bundle, a11y/SEO).
 
 1. **Does this perform a mutation (create/update/delete)?** *If yes, walk
    the mutation→UI contract: which views show this data, how does each
