@@ -116,6 +116,18 @@ style:
     tier: practice
     id: output_discipline
 
+  - rule: "Verify-then-act on real output. Never act on stale, garbled, or empty tool output — re-run the read until it returns fresh, coherent output before the next destructive step. Never guess an identifier you can derive: rev-parse the real SHA / read the real PR number / read the real branch, and pass that exact value forward. A `git reset --hard` or tag-move executed on a wrong/assumed value is the costliest mistake class; confirm the value first. Do NOT batch commit→push→merge→tag-move in one block — each step's success is the precondition for the next."
+    tier: practice
+    id: verify_then_act
+
+  - rule: "Isolate long stateful sequences in a dedicated subagent. When a task is a long, multi-step, stateful sequence — especially one spanning multiple repos/branches/worktrees, or many edit→build→verify cycles — run it in a dedicated subagent rather than inline in the main loop. Isolation means a bad reset, a cwd mix-up, a flaky-channel artifact, or a cancelled batch corrupts only the subagent's context, not the parent's accumulated state; and each unit gets its own clean verify-then-act loop. Parallel-independent units (e.g. one per repo) also fan out cleanly this way. Inline is fine for short, single-surface work."
+    tier: practice
+    id: isolate_stateful_sequences
+
+  - rule: "Across multiple checkouts, address each explicitly — never rely on cwd. When a task touches more than one repo/worktree, use `git -C <path> …` and `gh --repo <owner/repo> …` (and absolute paths for file tools) so a stale or surprising working directory can't send a commit, push, branch, or PR to the wrong repo. cwd-confusion crossing between checkouts is a recurring source of misplaced commits and 'pathspec did not match' errors."
+    tier: practice
+    id: explicit_repo_paths
+
   - rule: "Find before reading. Use Grep / search for symbols and keywords first. Don't Read whole files when a targeted range or rg search will answer the question."
     tier: practice
     id: find_before_read

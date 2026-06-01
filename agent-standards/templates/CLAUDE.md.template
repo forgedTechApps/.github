@@ -107,7 +107,19 @@ Pair this with **verify-then-act, one step at a time**: don't batch
 commit→push→merge before confirming each step from real output. Premature
 batching produces both wrong claims (citing a SHA or a "passing" suite you
 didn't actually read) and noise. The `SessionStart` hook re-asserts this each
-session.
+session. Two corollaries hard-won from real sessions:
+
+- **Never act on stale/garbled/empty tool output, and never guess a derivable
+  identifier.** Re-run the read until it's fresh and coherent before any
+  destructive step; `rev-parse` the real SHA, read the real PR number. A
+  `git reset --hard` or tag-move on a wrong value is the costliest mistake
+  class — confirm the value first.
+- **Isolate long, stateful, multi-repo sequences in a dedicated subagent.**
+  When work spans many edit→verify cycles or several repos/branches, run it in
+  a subagent so a bad reset, cwd mix-up, or cancelled batch corrupts only that
+  context — not the parent's. And **address each checkout explicitly** with
+  `git -C <path>` / `gh --repo <owner/repo>` / absolute paths; never rely on
+  cwd when more than one repo is in play.
 
 ## Plan before code
 
