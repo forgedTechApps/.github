@@ -99,10 +99,11 @@ agent-standards/
 
 ## Merge gate
 
-This repo has no branch protection — **never `gh pr merge --auto`** (a committed PreToolUse hook
-blocks it). Poll the head commit's check-runs (the `MCP CI` workflow runs on `mcp-server/**`
-changes) until green, then merge manually. Docs-only PRs that don't touch `mcp-server/` won't
-trigger CI — that's expected; merge once mergeable.
+`main` is branch-protected (Teams): PRs required, no direct push, no force-push. `--auto` is now
+safe — it waits for mergeability before merging — so the old `--auto`-block hook was removed.
+Workflow: open a PR into `main`, let the `MCP CI` workflow (runs on `mcp-server/**` changes)
+report, merge when green. Docs-only PRs that don't touch `mcp-server/` won't trigger CI — that's
+expected; merge once mergeable. Branch model: work → `dev`, `dev` → `main` for release.
 
 ## Self-check
 
