@@ -88,13 +88,18 @@ on:
         required: false
 
 jobs:
-  # ── Linux job: lint + dependency scan (×1) ──────────────────────────────
-  # SwiftLint (Linux Docker image) and osv-scanner (Linux-native) don't need
-  # Xcode/macOS. Running them on ubuntu keeps the ×10 macOS runner doing only
-  # what genuinely requires it (compile + simulator test). Saves ~2-4 min ×10
-  # per run. (issue: org-wide CI minute reduction)
-  lint-scan:
-    name: Lint + Dependency Scan (Linux)
+  # ── Linux job: lint (×1) ────────────────────────────────────────────────
+  # SwiftLint (Linux Docker image) doesn't need Xcode/macOS. Running it on
+  # ubuntu keeps the ×10 macOS runner doing only what genuinely requires it
+  # (compile + simulator test). Saves ~2-4 min ×10 per run.
+  # (issue: org-wide CI minute reduction)
+  #
+  # No dependency scan here: osv-scanner has no Swift Package Manager extractor
+  # (Package.resolved is unsupported — it errors with "could not determine
+  # extractor"), so OSV can't scan SwiftPM deps. If SwiftPM dependency scanning
+  # is wanted, use GitHub's dependency-review / Dependabot instead.
+  lint:
+    name: Lint (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -108,7 +113,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      # ── Gate 1: SwiftLint (Linux via official Docker image) ─────────────
+      # ── SwiftLint (Linux via official Docker image) ─────────────────────
       # The realm/swiftlint image ENTRYPOINT is already `swiftlint`, so `args:`
       # is arguments only. Pass `--config <wd>/.swiftlint.yml` and NO path: a
       # bare path overrides the config's `included:` and finds nothing
@@ -119,17 +124,6 @@ jobs:
         uses: docker://ghcr.io/realm/swiftlint:latest
         with:
           args: lint --strict --config ${{ inputs.working-directory }}/.swiftlint.yml
-
-      # ── Gate 2: OSV dependency scan (Package.resolved) ──────────────────
-      - name: OSV dependency scan
-        run: |
-          if [ ! -f "Package.resolved" ]; then
-            echo "No Package.resolved found — skipping OSV scan"
-            exit 0
-          fi
-          curl -sSfL "https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64" -o /usr/local/bin/osv-scanner
-          chmod +x /usr/local/bin/osv-scanner
-          osv-scanner --lockfile=Package.resolved
 
   quality-gate:
     name: Quality Gate (Swift/iOS)
@@ -223,17 +217,30 @@ jobs:
 
       - name: Check unit coverage threshold
         run: |
-          COVERAGE=$(xcrun xccov view --report --json UnitTestResults.xcresult 2>/dev/null \
+          if [ ! -e UnitTestResults.xcresult ]; then
+            echo "❌ UnitTestResults.xcresult not found — the test step did not produce a coverage bundle (build/test failure?)."
+            exit 1
+          fi
+          # Fail loud on missing/empty coverage rather than silently coercing to
+          # 0% — a 0% that's actually "no data" once masked a broken build.
+          COVERAGE=$(xcrun xccov view --report --json UnitTestResults.xcresult \
             | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
           targets = data.get('targets', [])
-          for t in targets:
-            if 'Tests' not in t.get('name', ''):
-              cov = t.get('lineCoverage', 0) * 100
-              print(f'{cov:.1f}')
-              break
-          " 2>/dev/null || echo "0")
+          # Prefer the .app product target; never a *.xctest test bundle. Fall
+          # back to the report's top-level lineCoverage aggregate.
+          app = next((t for t in targets if t.get('name','').endswith('.app')), None)
+          prod = app or next((t for t in targets if not t.get('name','').endswith('.xctest')), None)
+          cov = (prod.get('lineCoverage') if prod else data.get('lineCoverage'))
+          if cov is None:
+              sys.stderr.write('no lineCoverage in xccov report\n'); sys.exit(2)
+          print(f'{cov * 100:.1f}')
+          ")
+          if [ -z "$COVERAGE" ]; then
+            echo "❌ Could not parse coverage from UnitTestResults.xcresult (no coverage data in bundle)."
+            exit 1
+          fi
           echo "Unit coverage: ${COVERAGE}% (threshold: ${{ inputs.unit-coverage-threshold }}%)"
           if (( $(echo "$COVERAGE < ${{ inputs.unit-coverage-threshold }}" | bc -l) )); then
             echo "❌ Unit coverage ${COVERAGE}% is below threshold ${{ inputs.unit-coverage-threshold }}%"
@@ -273,17 +280,26 @@ jobs:
       - name: Check UI / integration coverage threshold
         if: inputs.run-ui-tests
         run: |
-          COVERAGE=$(xcrun xccov view --report --json UITestResults.xcresult 2>/dev/null \
+          if [ ! -e UITestResults.xcresult ]; then
+            echo "❌ UITestResults.xcresult not found — the UI test step did not produce a coverage bundle (build/test failure?)."
+            exit 1
+          fi
+          COVERAGE=$(xcrun xccov view --report --json UITestResults.xcresult \
             | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
           targets = data.get('targets', [])
-          for t in targets:
-            if 'Tests' not in t.get('name', ''):
-              cov = t.get('lineCoverage', 0) * 100
-              print(f'{cov:.1f}')
-              break
-          " 2>/dev/null || echo "0")
+          app = next((t for t in targets if t.get('name','').endswith('.app')), None)
+          prod = app or next((t for t in targets if not t.get('name','').endswith('.xctest')), None)
+          cov = (prod.get('lineCoverage') if prod else data.get('lineCoverage'))
+          if cov is None:
+              sys.stderr.write('no lineCoverage in xccov report\n'); sys.exit(2)
+          print(f'{cov * 100:.1f}')
+          ")
+          if [ -z "$COVERAGE" ]; then
+            echo "❌ Could not parse coverage from UITestResults.xcresult (no coverage data in bundle)."
+            exit 1
+          fi
           echo "UI/integration coverage: ${COVERAGE}% (threshold: ${{ inputs.integration-coverage-threshold }}%)"
           if (( $(echo "$COVERAGE < ${{ inputs.integration-coverage-threshold }}" | bc -l) )); then
             echo "❌ UI/integration coverage ${COVERAGE}% is below threshold ${{ inputs.integration-coverage-threshold }}%"
