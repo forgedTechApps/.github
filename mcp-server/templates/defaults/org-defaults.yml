@@ -120,9 +120,16 @@ style:
     tier: practice
     id: verify_then_act
 
-  - rule: "Isolate long stateful sequences in a dedicated subagent. When a task is a long, multi-step, stateful sequence — especially one spanning multiple repos/branches/worktrees, or many edit→build→verify cycles — run it in a dedicated subagent rather than inline in the main loop. Isolation means a bad reset, a cwd mix-up, a flaky-channel artifact, or a cancelled batch corrupts only the subagent's context, not the parent's accumulated state; and each unit gets its own clean verify-then-act loop. Parallel-independent units (e.g. one per repo) also fan out cleanly this way. Inline is fine for short, single-surface work."
+  # ── Dispatch: single inline vs. one subagent vs. many (practices) ───────
+  # Two orthogonal decisions. First decide IF the work leaves the main loop
+  # (isolation), then decide IF it splits across multiple agents (independence).
+  - rule: "Dispatch to a subagent for ISOLATION — not by default, by risk. Do the work INLINE in the main loop when it's short and single-surface (a few edits in one repo, a read/search, a one-shot fix). Move it into a DEDICATED subagent when it is long/stateful AND any of: spans multiple repos/branches/worktrees; runs many edit→build→verify cycles; or performs destructive/irreversible steps (git reset --hard, tag moves, force-push, bulk rewrites). The reason is blast-radius containment: a bad reset, a cwd mix-up, a flaky-tool artifact, or a cancelled batch then corrupts only the subagent's throwaway context, not the parent's accumulated state — and the unit gets its own clean verify-then-act loop. When unsure, inline is the default; escalate to a subagent when the work shows the triggers above, not preemptively."
     tier: practice
-    id: isolate_stateful_sequences
+    id: dispatch_subagent_for_isolation
+
+  - rule: "Use MULTIPLE agents only for genuinely INDEPENDENT units — one subagent is the default. Parallel/fan-out is justified ONLY when the units share no mutable state, have no ordering dependency, and cannot write-conflict — e.g. one agent per repo for an org-wide read/audit, or fan-out searches over disjoint areas. If units share state, must run in a fixed order, or could touch the same files/branches, run them SEQUENTIALLY in ONE subagent — parallel agents racing on shared state is a corruption source, not a speedup. Test before fanning out: 'could any two of these, run at the same time, read a half-written result or commit to the same place?' If yes, it is not parallelisable. Number of agents follows the number of independent units, not a target."
+    tier: practice
+    id: parallelize_only_independent
 
   - rule: "Across multiple checkouts, address each explicitly — never rely on cwd. When a task touches more than one repo/worktree, use `git -C <path> …` and `gh --repo <owner/repo> …` (and absolute paths for file tools) so a stale or surprising working directory can't send a commit, push, branch, or PR to the wrong repo. cwd-confusion crossing between checkouts is a recurring source of misplaced commits and 'pathspec did not match' errors."
     tier: practice
