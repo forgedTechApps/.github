@@ -273,6 +273,10 @@ architecture:
       tier: practice
       id: migrations_forward_only
 
+    - rule: "Version every consumed interface with SemVer semantics — HTTP/edge APIs, published packages, the @v1 reusable-workflow tag, the MCP tool/schema surface. NON-breaking changes (additive: a new optional field, a new endpoint, a new optional input) are a MINOR (or patch) bump. BREAKING changes (removed/renamed field, changed response shape or semantics, a newly-required input, removed endpoint) are a MAJOR bump. A version bump alone is not enough: a breaking change requires (1) a deprecation window where old and new coexist, (2) a changelog/migration note saying what broke and how to migrate, and (3) coordinated rollout for shared surfaces that land in consumers immediately (the @v1 tag, org-defaults). Never repurpose an existing major version with a breaking change in place — cut the next major."
+      tier: practice
+      id: api_versioning_semver
+
     - rule: "Database access goes through a repository / data-access layer — UI / route handlers never touch the DB driver directly."
       tier: practice
       id: db_access_via_dal
