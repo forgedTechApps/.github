@@ -202,6 +202,23 @@ Make the feature pass tests first. Restructure second. Refactoring
 mid-feature is the most reliable way to lose the thread — both for the agent
 and for the human reviewing it.
 
+## Version your interfaces (SemVer)
+
+Anything other people (or other repos) consume is a versioned contract: HTTP/
+edge APIs, published packages, the `@v1` reusable-workflow tag, the MCP tool/
+schema surface. Apply SemVer:
+
+- **Non-breaking (additive)** — a new optional field, a new endpoint, a new
+  optional input → **minor/patch** bump.
+- **Breaking** — removed/renamed field, changed response shape or semantics, a
+  newly-required input, removed endpoint → **major** bump.
+
+A version number alone doesn't make a breaking change safe. A breaking change
+needs: a **deprecation window** (old + new coexist), a **changelog/migration
+note** (what broke, how to migrate), and **coordinated rollout** for shared
+surfaces that hit consumers immediately (the `@v1` tag, `org-defaults`). Never
+slip a breaking change into an existing major — cut the next major instead.
+
 ## Review before merge — stranger + readiness
 
 Two passes, beyond the diff being correct:
