@@ -114,12 +114,38 @@ session. Two corollaries hard-won from real sessions:
   destructive step; `rev-parse` the real SHA, read the real PR number. A
   `git reset --hard` or tag-move on a wrong value is the costliest mistake
   class — confirm the value first.
-- **Isolate long, stateful, multi-repo sequences in a dedicated subagent.**
-  When work spans many edit→verify cycles or several repos/branches, run it in
-  a subagent so a bad reset, cwd mix-up, or cancelled batch corrupts only that
-  context — not the parent's. And **address each checkout explicitly** with
-  `git -C <path>` / `gh --repo <owner/repo>` / absolute paths; never rely on
-  cwd when more than one repo is in play.
+- **Address each checkout explicitly** with `git -C <path>` /
+  `gh --repo <owner/repo>` / absolute paths; never rely on cwd when more than
+  one repo is in play. (Dispatch — single vs. many agents — is its own section
+  below.)
+
+## Dispatching work — single inline vs. one subagent vs. many
+
+Two **separate** decisions, in order. Don't conflate them.
+
+**1. Does it leave the main loop? (isolation — decide by risk, not by default)**
+
+- **Inline** (in the main loop) when the work is short and single-surface: a
+  few edits in one repo, a read/search, a one-shot fix. This is the default.
+- **One dedicated subagent** when the work is long/stateful **and** any of:
+  spans multiple repos/branches/worktrees; runs many edit→build→verify cycles;
+  or does destructive/irreversible steps (`git reset --hard`, tag moves,
+  force-push, bulk rewrites). Reason: **blast-radius containment** — a bad
+  reset, cwd mix-up, flaky-tool artifact, or cancelled batch then corrupts only
+  the subagent's throwaway context, not the parent's accumulated state, and the
+  unit gets its own clean verify-then-act loop.
+
+**2. Does it split across many agents? (parallelism — only for independence)**
+
+- **One subagent, sequential** is the default once you've left the main loop.
+- **Multiple/parallel agents** only when the units are *genuinely independent*:
+  no shared mutable state, no ordering dependency, no write-conflict — e.g. one
+  agent per repo for an org-wide audit, fan-out reads over disjoint areas.
+- **The test before fanning out:** "could any two of these, running at the same
+  time, read a half-written result or commit to the same place?" If yes, it is
+  **not** parallelisable — run them sequentially in one subagent. Parallel
+  agents racing on shared state is a corruption source, not a speedup. The
+  number of agents follows the number of independent units, not a target.
 
 ## Plan before code
 
