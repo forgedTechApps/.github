@@ -1,0 +1,1 @@
+{ "exact": true, "findings": [ { "severity": "info", "code": "FRAMEWORK_SUPPORT_OK" } ] }

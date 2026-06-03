@@ -1,0 +1,8 @@
+version: 1
+repo: test/fixture
+language: node
+framework_support:
+  frameworks:
+    - id: dotnet
+      eol:
+        "8.0": "2026-11-10"

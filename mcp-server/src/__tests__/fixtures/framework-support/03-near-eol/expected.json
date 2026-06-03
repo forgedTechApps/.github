@@ -1,0 +1,1 @@
+{ "exact": true, "findings": [ { "severity": "warn", "code": "FRAMEWORK_NEAR_EOL", "messageIncludes": "node 20" } ] }

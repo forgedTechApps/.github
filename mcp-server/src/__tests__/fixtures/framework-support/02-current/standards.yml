@@ -1,0 +1,9 @@
+version: 1
+repo: test/fixture
+language: node
+framework_support:
+  warn_within_months: 6
+  frameworks:
+    - id: node
+      eol:
+        "20": "2030-04-30"

@@ -143,6 +143,17 @@ export interface AgentStandards {
       enabled?: boolean;
     };
   };
+  /**
+   * Runtime / SDK end-of-support table for check_framework_support. Each entry
+   * is a framework whose declared version (read from the project's version
+   * file) is compared against `eol` dates. Offline + deterministic — the EOL
+   * dates are maintained here (org-defaults), not fetched.
+   */
+  framework_support?: {
+    /** Months-before-EOL that flips a finding from info → warn. Default 6. */
+    warn_within_months?: number;
+    frameworks?: FrameworkEol[];
+  };
 }
 
 export interface TenantIsolationConfig {
@@ -170,6 +181,18 @@ export interface TenantIsolationConfig {
    * denominator so the parity ratio reflects only tenant-scoped routes.
    */
   route_files_exclude?: string[];
+}
+
+/**
+ * One framework's end-of-support record for check_framework_support.
+ * `id` selects how the declared version is read (the version-file parser);
+ * `eol` maps a version string → its end-of-support date (YYYY-MM-DD).
+ */
+export interface FrameworkEol {
+  /** Which runtime this is — selects the version-file parser. */
+  id: "dotnet" | "flutter" | "dart" | "node" | "swift" | "python";
+  /** Map of declared-version (major or major.minor) → EOL date YYYY-MM-DD. */
+  eol: Record<string, string>;
 }
 
 export interface ModelSpec {

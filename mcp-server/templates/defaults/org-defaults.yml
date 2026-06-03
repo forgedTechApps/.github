@@ -380,3 +380,46 @@ branching:
 #
 # If a scan must be suppressed, add an inline justification comment AND open
 # a tracking issue. Never silently bypass.
+
+# ── Framework / runtime end-of-life (org policy) ───────────────────────────
+# check_framework_support reads each repo's DECLARED runtime version and
+# compares it to the dates below. Within warn_within_months of EOL -> warn
+# (FRAMEWORK_NEAR_EOL); past EOL -> error (FRAMEWORK_PAST_EOL).
+#
+# MAINTENANCE: these are upstream vendor dates — review quarterly and on any
+# new major release. Dates are official LTS/release-track EOLs as published
+# by each vendor (nodejs.org/en/about/previous-releases,
+# learn.microsoft.com/lifecycle, devguide.python.org/versions). Key
+# granularity matches how each runtime declares its version:
+#   - node:   major        (.nvmrc / package.json engines -> "20")
+#   - dotnet: major        (global.json / TargetFramework net8.0 -> "8")
+#   - python: major.minor  (.python-version / requires-python -> "3.12")
+#   - flutter/dart/swift:  no fixed vendor EOL calendar (only the latest
+#       stable is supported). Left unconfigured -> the check reports
+#       VERSION_UNKNOWN_EOL (info), not a false error. Add dated entries
+#       only if the org adopts a pinned-support policy.
+framework_support:
+  warn_within_months: 6
+  frameworks:
+    - id: node
+      eol:
+        "16": "2023-09-11"
+        "18": "2025-04-30"
+        "20": "2026-04-30"
+        "22": "2027-04-30"
+        "24": "2028-04-30"
+    - id: dotnet
+      eol:
+        "6": "2024-11-12"
+        "7": "2024-05-14"
+        "8": "2026-11-10"
+        "9": "2026-05-12"
+        "10": "2028-11-14"
+    - id: python
+      eol:
+        "3.8": "2024-10-31"
+        "3.9": "2025-10-31"
+        "3.10": "2026-10-31"
+        "3.11": "2027-10-31"
+        "3.12": "2028-10-31"
+        "3.13": "2029-10-31"
