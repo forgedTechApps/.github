@@ -381,6 +381,40 @@
           "description": "Required if bespoke: true. Document WHY this repo can't use the canonical workflow."
         }
       }
+    },
+    "framework_support": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Runtime/framework end-of-life table. check_framework_support reads each repo's declared version and flags FRAMEWORK_PAST_EOL (error) / FRAMEWORK_NEAR_EOL (warn). Maintained org-wide in org-defaults.yml; projects rarely override.",
+      "properties": {
+        "warn_within_months": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 6,
+          "description": "How many months before a version's EOL date to start warning. Within this window -> FRAMEWORK_NEAR_EOL (warn); past the date -> FRAMEWORK_PAST_EOL (error)."
+        },
+        "frameworks": {
+          "type": "array",
+          "description": "Per-framework EOL maps. The check looks up the repo's declared version against the matching id.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "eol"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": ["dotnet", "flutter", "dart", "node", "swift", "python"],
+                "description": "Runtime/framework identifier. Determines which version file(s) the check reads."
+              },
+              "eol": {
+                "type": "object",
+                "additionalProperties": { "type": "string" },
+                "description": "Map of version key -> EOL date (YYYY-MM-DD). Key granularity matches how the runtime is declared: major (node '20', dotnet '8'), or major.minor (flutter '3.24', python '3.12')."
+              }
+            }
+          }
+        }
+      }
     }
   },
 

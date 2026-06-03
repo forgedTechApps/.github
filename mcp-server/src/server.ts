@@ -14,6 +14,7 @@ import { checkCodebaseHygiene } from "./check-codebase-hygiene.js";
 import { checkTenantIsolation } from "./check-tenant-isolation.js";
 import { checkCrossTenantTest } from "./check-cross-tenant-test.js";
 import { checkEnvExample } from "./check-env-example.js";
+import { checkFrameworkSupport } from "./check-framework-support.js";
 import { checkSubscription } from "./check-subscription.js";
 import { checkViewSize } from "./check-view-size.js";
 import { checkHttpSecurity } from "./check-http-security.js";
@@ -105,6 +106,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
   const CheckTenantIsolationArgs = z.object({ repo_root: RepoRoot });
   const CheckCrossTenantTestArgs = z.object({ repo_root: RepoRoot });
   const CheckEnvExampleArgs = z.object({ repo_root: RepoRoot });
+  const CheckFrameworkSupportArgs = z.object({ repo_root: RepoRoot });
   const CheckSubscriptionArgs = z.object({ repo_root: RepoRoot });
   const CheckViewSizeArgs = z.object({ repo_root: RepoRoot });
   const CheckHttpSecurityArgs = z.object({ repo_root: RepoRoot });
@@ -121,7 +123,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
   const RunLocalChecksArgs = z.object({
     repo_root: RepoRoot,
-    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test", "env_example", "view_size", "http_security"])).optional(),
+    include: z.array(z.enum(["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test", "env_example", "framework", "view_size", "http_security"])).optional(),
     secrets_scope: z.enum(["staged", "tracked", "all"]).default("staged"),
   });
 
@@ -382,6 +384,22 @@ export function createServer(options: CreateServerOptions = {}): Server {
         },
       },
       {
+        name: "check_framework_support",
+        description:
+          "Flags declared runtime/framework versions that are past or nearing end-of-life. " +
+          "Reads the declared version per framework (dotnet: global.json / Directory.Build.props " +
+          "TargetFramework; flutter+dart: pubspec.yaml environment; node: .nvmrc / package.json " +
+          "engines; swift: Package.swift swift-tools-version; python: .python-version / pyproject " +
+          "requires-python), looks it up against the org-maintained EOL table in framework_support, " +
+          "and reports FRAMEWORK_PAST_EOL (error) or FRAMEWORK_NEAR_EOL (warn within the configured " +
+          "window). Info findings cover OK / not-configured / no-version-file / unknown-version cases.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: { repo_root: repoRootProp },
+        },
+      },
+      {
         name: "check_subscription",
         description:
           "Wiring health check: verifies a project is fully + correctly subscribed to the " +
@@ -519,7 +537,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
                 enum: [
                   "ci", "branching", "secrets", "design", "hygiene", "tenant",
                   "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test",
-                  "env_example", "view_size", "http_security",
+                  "env_example", "framework", "view_size", "http_security",
                 ],
               },
               description: "Subset of checks to run. Default: all 14.",
@@ -863,6 +881,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
         return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
       }
 
+      if (req.params.name === "check_framework_support") {
+        const args = CheckFrameworkSupportArgs.parse(req.params.arguments ?? {});
+        const standards = await loadStandards(args.repo_root);
+        const findings = await checkFrameworkSupport(args.repo_root, standards);
+        await appendDrift(args.repo_root, "check_framework_support", findings);
+        const isError = findings.some((f) => f.severity === "error");
+        return { isError, content: [{ type: "text", text: JSON.stringify(findings, null, 2) }] };
+      }
+
       if (req.params.name === "check_env_example") {
         const args = CheckEnvExampleArgs.parse(req.params.arguments ?? {});
         const findings = await checkEnvExample(args.repo_root);
@@ -942,7 +969,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
 
       if (req.params.name === "run_local_checks") {
         const args = RunLocalChecksArgs.parse(req.params.arguments ?? {});
-        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test", "env_example", "view_size", "http_security"]);
+        const include = new Set(args.include ?? ["ci", "branching", "secrets", "design", "hygiene", "tenant", "bundle", "sqli", "log_pii", "http_timeouts", "cross_tenant_test", "env_example", "framework", "view_size", "http_security"]);
         const standards = await loadStandards(args.repo_root);
         const sections: Array<{ source: string; findings: import("./check-ci.js").Finding[] }> = [];
         if (include.has("ci")) {
@@ -1004,6 +1031,11 @@ export function createServer(options: CreateServerOptions = {}): Server {
           const f = await checkEnvExample(args.repo_root);
           sections.push({ source: "check_env_example", findings: f });
           await appendDrift(args.repo_root, "check_env_example", f);
+        }
+        if (include.has("framework")) {
+          const f = await checkFrameworkSupport(args.repo_root, standards);
+          sections.push({ source: "check_framework_support", findings: f });
+          await appendDrift(args.repo_root, "check_framework_support", f);
         }
         if (include.has("view_size")) {
           const f = await checkViewSize(args.repo_root, standards);
