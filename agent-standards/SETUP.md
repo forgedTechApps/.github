@@ -52,12 +52,19 @@ export AGENT_STANDARDS_HOME="$HOME/Development/forgedtech"
 
 ## One-time build
 
-The MCP server runs from compiled output. After cloning (and after pulling server
-changes):
+The MCP server runs from compiled output (`dist/`, gitignored). `pnpm install`
+now runs a `postinstall` build automatically, so after cloning a plain
+`pnpm install` produces `dist/index.js`:
 
 ```sh
-cd "$AGENT_STANDARDS_HOME/mcp-server" && pnpm install && pnpm build
+cd "$AGENT_STANDARDS_HOME/mcp-server" && pnpm install
 ```
+
+After pulling server-source changes, rebuild explicitly: `pnpm build`. If the
+server ever fails to launch with `Cannot find module … dist/index.js`, `dist/`
+was wiped (e.g. a manual clean) — re-run `pnpm install` or `pnpm build`.
+(The durable fix that removes the local build + env var entirely is publishing
+the server — issue #41.)
 
 ## Verify
 

@@ -24,7 +24,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && find dist-test/__tests__ -name '*.test.js' -exec node --test {} +"
+    "test": "tsc -p tsconfig.test.json && find dist-test/__tests__ -name '*.test.js' -exec node --test {} +",
+    "postinstall": "tsc || true"
   },
   "keywords": ["mcp", "claude", "forgedtech", "agent-standards"],
   "license": "UNLICENSED",
