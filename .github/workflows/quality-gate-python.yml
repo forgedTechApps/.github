@@ -117,9 +117,14 @@ jobs:
           if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
           if [ -f "requirements-dev.txt" ]; then pip install -r requirements-dev.txt; fi
           if [ -f "pyproject.toml" ]; then pip install -e ".[dev]" 2>/dev/null || pip install -e .; fi
+          # Pin lint/type/security tools. Unpinned installs meant every CI run
+          # picked up the latest release, so a new mypy/ruff/bandit could fail
+          # the gate on UNCHANGED code (a new mypy began flagging pre-existing
+          # type errors repo-wide; an earlier bandit-arg change broke the scan).
+          # Pin to known-good versions; bump deliberately, not by drift.
           pip install \
             pytest pytest-cov pytest-asyncio \
-            ruff mypy bandit \
+            'ruff==0.15.4' 'mypy==2.1.0' 'bandit==1.9.4' \
             safety
 
       # ── Gate 1: Ruff lint ───────────────────────────────────────────────
