@@ -19,7 +19,8 @@ calls carry the work, with at most one short framing sentence per batch. No play
 tool/harness glitches (silently retry). Reserve fuller prose for genuine decisions/tradeoffs
 and the final result. Pair this with **verify-then-act, one step at a time**: don't batch
 commit→push→merge before confirming each step from real output — premature batching produces
-both wrong claims and noise. A `UserPromptSubmit` hook re-asserts this each turn.
+both wrong claims and noise. The org-wide `output_discipline` rule (org-defaults.yml,
+inherited via `extends`) carries this; the `SessionStart` hook re-asserts it each session.
 
 ## Principles
 
