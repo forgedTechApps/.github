@@ -2,7 +2,8 @@
 name: interview-me
 description: |
   Interview the user about a plan, design, or bugfix until you can produce a
-  concrete scope with files, test approach, and explicit "out of scope" list.
+  concrete scope with files, test approach, explicit "out of scope" list, and a
+  dispatch recommendation (inline vs. one subagent vs. many, grounded in the work).
   Use this skill at the start of any non-trivial task — features, bug fixes,
   architectural changes, auth changes. Also use when the user says "let's
   build/design/fix X", "plan this", "interview me", or proposes a change with
@@ -77,6 +78,31 @@ better recommendations and a faster interview.
    the concrete example to paste matters more than any description. "Match
    `apps/web/lib/foo.ts`" beats "follow the existing pattern." If there's
    genuinely no precedent, say so — that itself is worth surfacing.*
+8. **How will this be executed — inline, one subagent, or many?** *Recommend
+   a dispatch grounded in the scope you just built (the files from #4, the
+   triggers below), not by habit. The default is **inline in the main loop**;
+   escalate only when the work shows a reason to. Decide in two steps:*
+   - *Inline vs. one subagent (isolation, by risk): keep it **inline** when
+     it's short and single-surface — a few edits in one repo, a read/search,
+     a one-shot fix. Move it into **one dedicated subagent** when it's
+     long/stateful AND any of: spans multiple repos/branches/worktrees; runs
+     many edit→build→verify cycles; or performs destructive/irreversible steps
+     (git reset --hard, tag moves, force-push, bulk rewrites). The reason is
+     blast-radius containment, not speed — a bad reset or cwd mix-up then
+     corrupts only the subagent's throwaway context.*
+   - *One vs. many (independence): use **multiple agents only for genuinely
+     independent units** — no shared mutable state, no ordering dependency, no
+     possible write-conflict (e.g. one agent per repo for an org-wide
+     read/audit, disjoint-area searches). Test: "could any two, run at once,
+     read a half-written result or commit to the same place?" If yes, run them
+     **sequentially in one subagent**. Number of agents follows the number of
+     independent units, not a target.*
+   *State the recommendation in one line — e.g. "Inline: ~3 edits in one repo,
+   no destructive steps" or "One subagent: multi-repo, many verify cycles" or
+   "5 agents: one per repo, read-only audit, fully independent" — and confirm.
+   This is the org `dispatch_subagent_for_isolation` + `parallelize_only_independent`
+   rules applied to THIS task; surfacing it here is what stops the reflexive
+   default-to-subagent.*
 
 ### Bugfix branch (additional)
 
@@ -198,12 +224,15 @@ attach_asvs_review({
 The phase stays `planning` until the user explicitly dispatches execution.
 Don't auto-transition.
 
-**Carry the pattern-to-mirror forward.** `start_task` has no dedicated field
-for the example reference (branch 7), so fold it into `scope_statement` —
-e.g. "…mirroring the shape of `apps/web/lib/foo.ts`." When you later dispatch
-an implementing subagent, paste that example into the prompt (GCOE's "E").
-Naming the pattern in the interview but dropping it before execution wastes
-the most useful thing the interview produced.
+**Carry the pattern-to-mirror AND the dispatch decision forward.** `start_task`
+has no dedicated field for the example reference (branch 7) or the dispatch
+recommendation (branch 8), so fold both into `scope_statement` — e.g.
+"…mirroring the shape of `apps/web/lib/foo.ts`; execute inline (single repo,
+~3 edits, no destructive steps)." When you later dispatch an implementing
+subagent, paste the example into the prompt (GCOE's "E"). Naming the pattern
+and the dispatch in the interview but dropping them before execution wastes the
+most useful things the interview produced — and the dropped dispatch line is
+exactly where the reflexive default-to-subagent creeps back in.
 
 ## During execution: expand_scope
 
