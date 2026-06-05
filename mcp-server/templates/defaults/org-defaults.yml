@@ -30,6 +30,10 @@ models:
     effort: medium
   execution:
     model: sonnet
+  # Fallback chain — use the next tier down (or up for haiku) when the
+  # preferred model is unavailable (outage, overload, 529/overloaded responses).
+  # opus → sonnet → haiku (step down); haiku → sonnet (step up).
+  fallback_order: [opus, sonnet, haiku]
 
 # ── Workflow gates (org-wide defaults) ──────────────────────────────────────
 # definition_of_ready (Increment 2) + scope_expansion (Increment 3): opt-in
@@ -158,6 +162,10 @@ style:
   - rule: "Route lightweight output sub-tasks to Haiku by default: annotations, PR comments, commit/PR summaries, changelog lines, status blurbs, and similar mechanical text-generation. When dispatching a subagent for one of these, pin model: haiku (Agent/Task call). This is a model tier BELOW the planning(opus)/execution(sonnet) split — those govern the main task; this governs the cheap output work spun off from it. Override to sonnet only when the sub-task genuinely needs judgment (e.g. summarising a large, subtle diff where a weak summary would mislead) — and say why. Default Haiku; escalate deliberately."
     tier: practice
     id: haiku_for_lightweight_subtasks
+
+  - rule: "Model fallback on outage or overload: if the preferred tier (opus for planning, sonnet for execution) is unavailable — persistent 529/overloaded responses, reported outage, or session model forced to a different tier — step down to the next available tier in the chain: opus → sonnet → haiku. For haiku tasks, step up to sonnet if haiku is unavailable. Do NOT block work waiting for the preferred model; declare the fallback model in current_model on start_task/propose_change so drift logs reflect the actual tier used. Resume on the preferred model for the next session once availability is restored."
+    tier: practice
+    id: model_fallback_on_outage
 
 style_ui:
   # ── UI / component-driven design ────────────────────────────────────────
