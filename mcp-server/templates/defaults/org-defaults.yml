@@ -30,10 +30,14 @@ models:
     effort: medium
   execution:
     model: sonnet
-  # Fallback chain — use the next tier down (or up for haiku) when the
-  # preferred model is unavailable (outage, overload, 529/overloaded responses).
-  # opus → sonnet → haiku (step down); haiku → sonnet (step up).
-  fallback_order: [opus, sonnet, haiku]
+  # Per-phase fallback — capability is preserved, not blindly stepped down.
+  # Reasoning/planning: opus preferred → sonnet (still capable for planning).
+  # Implementation/execution: sonnet preferred → opus (more capable) → haiku (last resort).
+  # Lightweight output: haiku preferred → sonnet.
+  fallback:
+    planning: [opus, sonnet]
+    execution: [sonnet, opus, haiku]
+    lightweight: [haiku, sonnet]
 
 # ── Workflow gates (org-wide defaults) ──────────────────────────────────────
 # definition_of_ready (Increment 2) + scope_expansion (Increment 3): opt-in
@@ -163,7 +167,7 @@ style:
     tier: practice
     id: haiku_for_lightweight_subtasks
 
-  - rule: "Model fallback on outage or overload: if the preferred tier (opus for planning, sonnet for execution) is unavailable — persistent 529/overloaded responses, reported outage, or session model forced to a different tier — step down to the next available tier in the chain: opus → sonnet → haiku. For haiku tasks, step up to sonnet if haiku is unavailable. Do NOT block work waiting for the preferred model; declare the fallback model in current_model on start_task/propose_change so drift logs reflect the actual tier used. Resume on the preferred model for the next session once availability is restored."
+  - rule: "Model fallback on outage or overload — use the per-phase chain, not a blanket step-down. When a preferred model is unavailable (persistent 529/overloaded, reported outage, or forced tier): PLANNING (opus preferred) → fall back to sonnet (still capable for reasoning). EXECUTION/implementation (sonnet preferred) → fall back to opus first (more capable, preserves quality), then haiku as last resort. LIGHTWEIGHT output (haiku preferred) → fall back to sonnet. Do NOT block work; declare the actual model used in current_model on start_task/propose_change so drift logs reflect it. Resume on the preferred model next session."
     tier: practice
     id: model_fallback_on_outage
 
