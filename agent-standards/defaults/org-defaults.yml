@@ -303,6 +303,25 @@ investigation:
   mode: soft
   min_read_write_ratio: 3
 
+debugging:
+  # ── Bug-fixing discipline (practices) ──────────────────────────────────
+  # These rules address agent thrashing: jumping to fixes without a
+  # hypothesis, bundling multiple changes, and failing to escalate when
+  # an approach isn't working. Enforced via drift log; no mechanical check
+  # is feasible (hypothesis is a written artifact, not a code pattern).
+  rules:
+    - rule: "Before touching any code on a bugfix, write a hypothesis: observed behaviour, suspected root cause, and predicted fix. The hypothesis must appear in the task record or a visible comment before the first edit. 'Try this and see' is not a hypothesis."
+      tier: practice
+      id: hypothesis_before_fix
+
+    - rule: "One variable per fix attempt. Change one thing, run the tests, read the result. No bundled patches ('let me also try X while I'm here'). If the hypothesis was wrong, form a new one before the next attempt."
+      tier: practice
+      id: fix_one_variable
+
+    - rule: "Three failed fix attempts on the same bug = mandatory stop. Do not attempt fix #4 without first questioning the approach: is the hypothesis wrong, is the architecture the real problem, does this need a different model or a human? Document the three attempts and the new direction before continuing."
+      tier: practice
+      id: three_strikes_escalate
+
 branching:
   required_branches: [main, dev]
   default_branch: main
