@@ -140,4 +140,3 @@ Do NOT deploy a skill you haven't tested with a subagent. Untested skills have g
 - [ ] Discipline skills: rationalization table + red flags list + "letter = spirit" statement
 - [ ] Tested with a subagent before committing
 - [ ] Committed to `agent-standards/skills/` (org) or `.claude/skills/` (project-local)
-# test
