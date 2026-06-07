@@ -152,11 +152,8 @@ architecture:
     - rule: "Authorisation at the resource level, not just the route. Every read/write checks the requesting principal can act on THIS object."
       tier: practice
       id: authorisation_at_resource_level
-      deferred:
-        owner: "Carlos"
-        target: "W18"
-        reason: "Generic AST check infeasible. Mitigated via cross-tenant integration test as Invariant."
-        issue: "https://github.com/forgedTechApps/.github/issues/7"
+      # Mitigation: cross_tenant_test_coverage invariant (mcp:check_cross_tenant_test)
+      # is the mechanical proxy. Issue #7 closed 2026-05-27.
 
     - rule: "Multi-tenant projects: every query function in the data layer accepts the tenant id as a parameter. Configure architecture.tenant_isolation to enable mechanical enforcement."
       tier: invariant
@@ -263,9 +260,7 @@ architecture:
       id: auth_change_asvs_artifact
       check_command: "mcp:attach_asvs_review"
       severity: error
-      deferred:
-        owner: "Carlos"
-        target: "W5"
+      # Implemented: attach_asvs_review is live in the MCP server (Increment 5).
 
     - rule: "Any change touching auth, input handling, data access, or templating triggers an OWASP Top 10 mental review (A01–A10)."
       tier: practice
