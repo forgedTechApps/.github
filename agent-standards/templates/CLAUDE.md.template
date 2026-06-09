@@ -69,6 +69,27 @@ This project has multiple independently deployable surfaces (e.g. API, web, mobi
 
 ---
 
+## Backwards-compatibility check before every deploy
+
+<!-- Replace the surface names and contract boundary below with this project's actual topology. -->
+
+This project has multiple independently deployable surfaces (e.g. API, web, mobile). Before deploying any single surface, answer:
+
+**If deploying the backend/API only:**
+- Does this remove or rename a field, endpoint, or response shape that the current client build calls?
+- Does this add a required request field that old clients don't send?
+- Does this run a DB migration that drops or renames a column the current code reads?
+
+**If deploying a client (web/mobile) only:**
+- Does this call a new endpoint or send a new field that the current backend doesn't yet serve?
+- Does this expect a new response field or changed shape?
+
+**Rule:** if any answer is yes, either (a) deploy in the right order (backend first for new fields; client first for removals), or (b) make the change additive and remove the deprecated shape in a follow-up after all surfaces are updated. Never deploy a breaking change to one surface while the other is still live on the old contract.
+
+**Safe to deploy independently:** additive-only changes (new optional field, new endpoint not yet called, pure UI/logic changes with identical API surface).
+
+---
+
 ## Principles
 
 Cultural guidelines that inform judgement when the rulebook is silent. They
