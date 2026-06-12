@@ -1,6 +1,6 @@
 ---
 name: writing-plans
-description: Use when you have a spec or requirements for a multi-step task, before touching code
+description: Use when you already have an approved spec or clear requirements and want a detailed step-by-step implementation plan doc before coding. Standalone — does not replace brainstorming (which routes to interview-me) or interview-me (which calls start_task). Invoke directly when a plan document is explicitly wanted.
 ---
 
 # Writing Plans

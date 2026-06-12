@@ -31,6 +31,7 @@ import {
   commitCheckpoint,
   expandScope,
   attachAsvsReview,
+  attachDeploymentCompatReview,
   surfaceUncertainty,
 } from "./task-tracking.js";
 import { generateCi, type CiKind, type Language } from "./init-repo.js";
@@ -204,6 +205,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
     controls_touched: z.array(z.string().min(1)).min(1),
     verification: z.string().min(10),
     reviewer: z.string().min(1),
+  });
+
+  const AttachDeploymentCompatReviewArgsZ = z.object({
+    repo_root: RepoRoot,
+    task_id: z.string().optional(),
+    summary: z.string().min(10),
+    surfaces_affected: z.array(z.string().min(1)).min(1),
+    deploy_strategy: z.enum(["safe", "ordered", "simultaneous"]),
+    deploy_order: z.array(z.string().min(1)).optional(),
   });
 
   const repoRootProp = defaultRepoRoot
@@ -712,6 +722,43 @@ export function createServer(options: CreateServerOptions = {}): Server {
         },
       },
       {
+        name: "attach_deployment_compat_review",
+        description:
+          "Attach a deployment compatibility review to the active task. Required to unblock " +
+          "propose_change when the deployment_compat_review gate fires — i.e. the proposed write " +
+          "touches an API surface path (routes, schemas, Edge Functions, DTOs). Answer the " +
+          "backwards-compatibility checklist in CLAUDE.md first, then call this with your findings.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot
+            ? ["summary", "surfaces_affected", "deploy_strategy"]
+            : ["repo_root", "summary", "surfaces_affected", "deploy_strategy"],
+          properties: {
+            repo_root: repoRootProp,
+            task_id: { type: "string", description: "Defaults to the active task." },
+            summary: {
+              type: "string",
+              description: "What was checked: which surfaces, which fields/endpoints changed, deploy order confirmed.",
+            },
+            surfaces_affected: {
+              type: "array",
+              items: { type: "string" },
+              description: "The surfaces involved, e.g. ['api', 'web', 'mobile'].",
+            },
+            deploy_strategy: {
+              type: "string",
+              enum: ["safe", "ordered", "simultaneous"],
+              description: "'safe' = additive-only (deploy in any order); 'ordered' = must deploy surfaces in deploy_order; 'simultaneous' = must release together.",
+            },
+            deploy_order: {
+              type: "array",
+              items: { type: "string" },
+              description: "Required when deploy_strategy='ordered'. Surfaces in deployment sequence, e.g. ['api', 'web'].",
+            },
+          },
+        },
+      },
+      {
         name: "surface_uncertainty",
         description:
           "Record (or resolve) an uncertainty encountered during a task — ambiguous spec, unknown " +
@@ -1099,6 +1146,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
       if (req.params.name === "attach_asvs_review") {
         const args = AttachAsvsReviewArgsZ.parse(req.params.arguments ?? {});
         const result = await attachAsvsReview(args.repo_root, args);
+        return {
+          isError: result.blocked,
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      if (req.params.name === "attach_deployment_compat_review") {
+        const args = AttachDeploymentCompatReviewArgsZ.parse(req.params.arguments ?? {});
+        const result = await attachDeploymentCompatReview(args.repo_root, args);
         return {
           isError: result.blocked,
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],

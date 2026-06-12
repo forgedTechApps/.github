@@ -42,7 +42,30 @@ gates:
   auth_change_asvs_artifact:
     enabled: true
 
+  # deployment_compat_review: before proposing a write that touches an API
+  # surface (routes, schemas, Edge Functions, DTOs), the agent must confirm
+  # backwards-compatibility between independently deployable surfaces.
+  # Not enabled org-wide by default — projects with multiple surfaces opt in.
+  # When enabled, propose_change against api_surface_paths blocks until
+  # attach_deployment_compat_review is called on the active task.
+  deployment_compat_review:
+    enabled: false
+    # Paths that constitute an API surface — a change here could break a consumer
+    # that isn't redeployed at the same time. Projects should override this list.
+    api_surface_paths:
+      - "**/routes/**"
+      - "**/api/**"
+      - "**/edge-functions/**"
+      - "**/supabase/functions/**"
+      - "**/*.dto.ts"
+      - "**/schema.ts"
+
 style:
+  # ── Output discipline (practice) ──────────────────────────────────────
+  - rule: "During investigation and execution, be terse — let tool calls carry the work, at most one short framing sentence per batch. No play-by-play, no recapping tool output, no narrating transient glitches. Reserve fuller prose for genuine decisions/tradeoffs and the final result."
+    tier: practice
+    id: output_discipline
+
   # ── Code hygiene (invariants) ──────────────────────────────────────────
   - rule: "No commented-out code in committed changes. Delete it — git history is the archive."
     tier: invariant
@@ -322,6 +345,13 @@ branching:
   default_branch: main
   feature_branch_pattern: "^(feat|fix|chore|docs|test|ci|refactor|perf|style)/[a-z0-9._-]+$"
   mode: soft
+
+  rules:
+    - rule: "All work happens on a feature branch. Never commit directly to 'main' or 'dev'. Direct pushes to both are blocked by the org gitflow-enforce ruleset."
+      tier: invariant
+      id: branch_name_convention
+      check_command: "mcp:check_branching"
+      severity: error
 
 # ── Vulnerability scanning (org policy) ────────────────────────────────────
 # Enforced by the canonical .github/workflows/security-scan.yml +

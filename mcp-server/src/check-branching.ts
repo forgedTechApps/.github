@@ -59,7 +59,19 @@ export async function checkBranching(
   if (currentBranch.ok && currentBranch.out !== "HEAD") {
     const name = currentBranch.out;
     const isProtected = policy.required_branches.includes(name);
-    if (!isProtected && policy.feature_branch_pattern) {
+
+    // Working directly on a protected branch (main/dev) is always an error —
+    // it means the agent is about to commit without a feature branch, which the
+    // org gitflow-enforce ruleset will reject at push time anyway. Catching it
+    // here surfaces the problem before any writes happen.
+    if (isProtected) {
+      findings.push({
+        severity: "error",
+        code: "WORKING_ON_PROTECTED_BRANCH",
+        message: `Current branch is '${name}', which is a protected branch. All work must be done on a feature branch.`,
+        fix: `Create a feature branch before making any changes: git checkout -b feat/<task-name>`,
+      });
+    } else if (policy.feature_branch_pattern) {
       const re = new RegExp(policy.feature_branch_pattern);
       if (!re.test(name)) {
         findings.push({

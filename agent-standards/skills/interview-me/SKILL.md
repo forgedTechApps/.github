@@ -26,6 +26,17 @@ skip the interview; the bypass is logged.
 
 Everything else: interview first, then call `start_task`.
 
+## Branch check — before the interview starts
+
+Before asking the first question, call `check_branching` (or run `git branch --show-current`). If the current branch is `main` or `dev`:
+
+1. **Stop the interview.**
+2. Tell the user: "You're on `<branch>` — all work must happen on a feature branch. Run: `git checkout -b feat/<task-name>` and I'll continue."
+3. Wait for confirmation that the agent is on a feature branch.
+4. Then proceed with the interview.
+
+This is not optional. The org `gitflow-enforce` ruleset blocks pushes to protected branches — catching it before any work begins saves the entire session.
+
 ## The contract
 
 The interview's job is to populate the fields `start_task` will ask for:
