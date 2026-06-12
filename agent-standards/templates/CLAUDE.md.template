@@ -17,16 +17,34 @@ reference) and edit project-specific bits.
 
 ---
 
-## Branch workflow
+## Branch workflow (GitFlow — enforced by org ruleset)
 
-**Never work directly on `main`.** All development goes through `dev` first.
+Direct pushes to `main` and `dev` are **physically blocked** by the org-level GitHub ruleset `gitflow-enforce`. All changes must go through a PR. There is no bypass.
 
-1. **Start every session on `dev`**: `git checkout dev && git pull origin dev`. If a feature branch is needed, cut it from `dev`, not from `main`.
-2. **Merge path**: feature branch → `dev` (PR or direct if trivial) → `main` (PR only, after `dev` is stable).
-3. **`main` is release-ready at all times.** Only `dev` merges into `main` — never a feature branch directly.
-4. **If you find yourself on `main`, stop.** Stash changes, switch to `dev`, and continue from there.
+**Gitflow pattern — always follow this:**
 
-Replace this section with any project-specific overrides (e.g. different default branch, direct-to-main allowed for hotfixes).
+```
+main          ← production only. Never commit here directly.
+dev           ← integration branch. Feature branches merge here via PR.
+feat/<name>   ← cut from dev. Merge back to dev via PR when done.
+fix/<name>    ← cut from dev. Same as feat.
+hotfix/<name> ← cut from main for production emergencies only. PR into both main AND dev.
+release/<ver> ← cut from dev when releasing. PR into main, then tag. Then merge tag back into dev.
+```
+
+**Session start — always:**
+```bash
+git checkout dev && git pull origin dev
+git checkout -b feat/<task-name>   # or fix/, chore/, etc.
+```
+
+**When done:**
+1. Push the feature branch: `git push -u origin feat/<name>`
+2. Open a PR: `gh pr create --base dev --title "..." --body "..."`
+3. Merge the PR (or ask the user to). Do not merge locally with `git merge`.
+4. `dev` → `main` is a separate PR, opened only when `dev` is stable and ready to release.
+
+**If you find yourself on `main` or `dev` with uncommitted changes:** `git stash`, checkout or create the right feature branch, `git stash pop`, continue.
 
 ---
 
