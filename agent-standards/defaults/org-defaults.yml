@@ -117,6 +117,41 @@ style:
     tier: practice
     id: propose_rule_after_correction
 
+  # ── Enforcement hygiene (practices + invariants) ───────────────────────
+  # The four principles below address recurring failure patterns across projects.
+  # Each principle in PRINCIPLES.md has a corresponding enforcement rule here.
+
+  - rule: "Prose-only rules are not enforcement. Any rule in CLAUDE.md that has been violated more than once must graduate to a check, gate, hook, or interview-me question via propose_claude_md_rule. Writing a rule down is not the same as enforcing it."
+    tier: practice
+    id: prose_only_rules_must_graduate
+    # Interview-me enforcement: the closing interview step must ask
+    # "Did this task reveal a rule that needs enforcement but has none?"
+    # If yes, the agent calls propose_claude_md_rule before closing the task.
+
+  - rule: "Any quality threshold set below the org default must carry a target date and increment in the config comment (e.g. '# Target: 80% by 2026-09 — raise 5% per sprint'). New files added in a PR must individually meet the org default (unit_min: 80%) even when the project aggregate is below it."
+    tier: practice
+    id: coverage_thresholds_have_direction
+    # Mechanical proxy: check_codebase_hygiene will surface a COVERAGE_BELOW_ORG_DEFAULT
+    # finding when unit_min < 80 and no target comment exists in .agent-standards.yml.
+    # Until that check lands, this is drift-log enforced via the interview-me closing step.
+
+  - rule: "Any document that contains the phrase 'applies to ALL work' or equivalent must be listed in context_pointers. If it is not loaded at session start, it does not govern anything. Check context_pointers whenever writing or updating a governing document."
+    tier: invariant
+    id: governing_docs_in_context_pointers
+    check_command: "mcp:check_paths"
+    severity: warn
+    # check_paths surfaces DEFERRED_INVARIANT_NO_CHECK for this rule today.
+    # A future increment will add a heuristic: scan CLAUDE.md for 'applies to all'
+    # and verify the referenced file appears in context_pointers.
+
+  - rule: "A multi-site fix commit (same bug fixed across ≥2 files) must be followed in the same PR or the next by a check, hook, or interview-me question that would have caught the original violation. 'Fixed in code' and 'prevented from recurring' are different outcomes."
+    tier: practice
+    id: multi_site_fix_requires_guard
+    # Interview-me enforcement: when closing a bugfix task where files_intended
+    # contained ≥2 sibling files with the same fix pattern, ask:
+    # "Is there now a check, hook, or DoR question that would catch this pattern
+    # in a new file?" If no, call propose_claude_md_rule before closing.
+
   # ── Token / context discipline (practices) ─────────────────────────────
   - rule: "Find before reading. Use Grep / search for symbols and keywords first. Don't Read whole files when a targeted range or rg search will answer the question."
     tier: practice

@@ -203,7 +203,29 @@ interview can usually continue once the uncertainty is documented.
 
 When all required fields have non-placeholder answers and any open
 uncertainties are resolved (in strict mode) or logged (in log-only),
-summarise the populated fields and ask the user to confirm. Then call:
+summarise the populated fields and ask the user to confirm.
+
+Before calling `start_task`, run the four enforcement-hygiene checks:
+
+1. **Prose-only rule?** Does this task touch an area where a known rule has no
+   check/gate/hook? If yes, flag it: "This rule in CLAUDE.md has no mechanical
+   enforcement — I'll call `propose_claude_md_rule` after execution to promote it."
+
+2. **Coverage threshold direction?** If the project's `unit_min` is below 80% and
+   the config has no target-date comment, note it as a gap. New files in scope
+   must individually target 80% coverage regardless of the project aggregate.
+
+3. **Governing document in `context_pointers`?** If this task produces or updates
+   a document that "applies to ALL work", confirm it's listed in `context_pointers`.
+   If not, add adding it as an explicit step in the task plan.
+
+4. **Multi-site fix requires a guard?** If `task_type: 'bugfix'` and `files_intended`
+   contains ≥2 sibling files with the same fix pattern, ask: "Is there now a check,
+   hook, or DoR question that would catch this pattern in a future file?" If no,
+   commit to calling `propose_claude_md_rule` before the task is marked done.
+
+These are not gates that block `start_task` — they surface enforcement debt before
+it compounds. Then call:
 
 ```
 start_task({

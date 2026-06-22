@@ -79,6 +79,43 @@ recurring lesson is that mechanically "checking" judgment produces noise.
 
 ---
 
+## Enforcement hygiene
+
+These principles address a specific class of failure the org has repeated across projects.
+Each has a corresponding enforcement rule in `org-defaults.yml`; the principle here is
+the *why*, the rule there is the *how*.
+
+- **Prose-only invariants are not invariants.** Any rule that would cause a real bug if
+  violated must have a mechanical enforcement path — a check, a gate, a hook, or an
+  interview-me question that fires before code is written. CLAUDE.md prose is a reminder,
+  not enforcement. If a rule has been violated more than once, it must graduate to a
+  check or gate via `propose_claude_md_rule`. A rule written down but not enforced gives
+  false confidence: the team believes the guardrail exists; the agent doesn't see it.
+
+- **Quality thresholds have a direction.** Any threshold set below the org default
+  (`unit_min: 80`, `integration_min: 40`) must include a target date and increment in
+  the config comment. New code in a PR must individually meet the org default even if
+  the project aggregate is below it — you cannot borrow coverage headroom from existing
+  code to ship new code undertested. A threshold frozen at "current baseline" is a
+  threshold that will never rise.
+
+- **If a document governs all work, it must be loaded at session start.** Any file
+  that claims to apply to every task in a project must appear in `context_pointers`.
+  If it isn't loaded when the agent starts, it doesn't govern anything — agents follow
+  rules they read, not rules that exist somewhere in the repo. The discipline: when you
+  write "this applies to ALL work", immediately check that the file is in
+  `context_pointers`.
+
+- **A multi-site fix must be followed by a check.** When a bug is fixed across
+  multiple files in a single cleanup commit, that is proof the pattern will recur —
+  another agent, another file, the same mistake. The fix must be followed (in the same
+  PR or the next) by a check, hook, or interview-me question that would have caught
+  the original violation. Otherwise the next agent writing that pattern restarts the
+  cycle. "We fixed it in the code" and "we prevented it from coming back" are two
+  different things.
+
+---
+
 ## How to use principles in practice
 
 - When two enforceable rules conflict, principles are the tie-breaker.
