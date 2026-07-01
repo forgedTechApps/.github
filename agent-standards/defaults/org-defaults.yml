@@ -324,6 +324,24 @@ architecture:
       tier: practice
       id: owasp_top_10_mental_review
 
+    # ── Error handling ─────────────────────────────────────────────────────
+    - rule: "Errors surface in place with a recoverable action — never silent, never navigate the user away. Every error state is designed, not accidental."
+      tier: practice
+      id: errors_recover_in_place
+      # UI mechanical proxy: interview-me UI branch asks this. The principle
+      # applies equally to API error responses, mobile error states, and CLI output.
+
+    - rule: "Caught exceptions log the error type and a safe context description — never the raw input, request body, or user-supplied content. Error payloads are as likely to contain PII as success payloads."
+      tier: practice
+      id: error_logs_no_raw_input
+      # Companion to no_pii_in_logs (which covers structured logs). This rule
+      # specifically targets the exception-catch site where raw inputs are
+      # tempting to include for debugging but unsafe to keep.
+
+    - rule: "Every async operation has an explicit error path. Unhandled promise rejections, uncaught async exceptions, and silent swallowed errors are rejected at review. 'It probably won't fail' is not a failure mode."
+      tier: practice
+      id: explicit_async_error_path
+
   sensitive_paths:
     - "**/.env*"
     - "**/secrets/**"
@@ -374,6 +392,45 @@ debugging:
     - rule: "Three failed fix attempts on the same bug = mandatory stop. Do not attempt fix #4 without first questioning the approach: is the hypothesis wrong, is the architecture the real problem, does this need a different model or a human? Document the three attempts and the new direction before continuing."
       tier: practice
       id: three_strikes_escalate
+
+prompt_injection:
+  # ── Prompt injection defence (for projects that call an LLM) ───────────
+  # Applies whenever a service, worker, or Edge Function passes external
+  # content — user text, tool/MCP results, web scrapes, receipts, file
+  # contents — to an LLM. "External" means anything that crossed a trust
+  # boundary before reaching the call site.
+  #
+  # These are practices, not invariants: generic AST detection of injection
+  # surfaces is impractical (same reason db_access_via_dal was demoted).
+  # The mechanical proxy is check_codebase_hygiene patterns for AI call
+  # sites, enabled per-project when an LLM chokepoint is configured.
+  rules:
+    - rule: "External content passed to an LLM is data, not instructions. Separate it from the system prompt with explicit delimiters and label it as untrusted (e.g. <user_content>, <tool_result>). Never interpolate raw external strings directly into the system prompt."
+      tier: practice
+      id: llm_external_content_delimited
+      # The 'one chokepoint per provider' principle (PRINCIPLES.md) is the
+      # structural defence: a single call site is the only place this needs
+      # to be applied. Scattered call sites multiply the attack surface.
+
+    - rule: "LLM call sites that accept external content must document their injection surface in a comment: what external sources feed this call, what the trust boundary is, and what the mitigation is. Undocumented call sites are invisible attack surfaces."
+      tier: practice
+      id: llm_injection_surface_documented
+      # Example comment: '# injection-surface: user receipt text (untrusted).
+      # Mitigation: content wrapped in <receipt> tags; system prompt is static.'
+      # check_codebase_hygiene can pattern-match for AI SDK call sites lacking
+      # this comment — enable per-project when LLM chokepoints are configured.
+
+    - rule: "Tool and MCP results are treated as untrusted data regardless of source. A compromised or poisoned tool response can carry instructions; the LLM cannot distinguish these from legitimate content. Validate structure and type; don't trust the content."
+      tier: practice
+      id: tool_results_are_untrusted
+
+    - rule: "LLM outputs that drive downstream actions (writes, API calls, code execution) must be validated before acting on them. An LLM output is a suggestion from an untrusted source, not a verified instruction. Parse and validate the structure; reject anything outside the expected schema."
+      tier: practice
+      id: llm_output_validated_before_action
+      # The requirements-engineer's write-scope guard and propose/confirm gate
+      # are the reference implementation of this rule. Any project where an
+      # LLM output triggers a write, deletion, or external call must have an
+      # equivalent structural guard — not just a prompt instruction to 'be careful'.
 
 branching:
   required_branches: [main, dev]

@@ -41,6 +41,34 @@ For projects that call an LLM (most of the suite):
   caching, result caching), route lightweight work to cheaper models, and know
   the per-action cost before shipping. (See the Model-routing tiers — the same
   "cheap work to Haiku" logic applies to the app's own LLM calls.)
+- **External content is data, not instructions.** Anything that crossed a trust
+  boundary before reaching an LLM call site — user text, tool results, MCP
+  responses, web scrapes, uploaded files — must be treated as potentially
+  adversarial. Separate it from the system prompt with explicit delimiters and
+  label it untrusted. The one-chokepoint rule is the structural defence: a
+  single call site means injection mitigations need to be applied exactly once.
+- **LLM outputs that drive actions must be validated.** An LLM output is a
+  suggestion from an untrusted channel, not a verified instruction. Parse and
+  validate the structure before acting on it; reject anything outside the
+  expected schema. The requirements-engineer's propose/confirm gate is the
+  reference pattern — any project where an LLM output triggers a write,
+  deletion, or external call needs an equivalent structural guard, not just a
+  prompt instruction to "be careful".
+
+## Error handling
+
+- **Every error state is designed, not accidental.** Errors surface in place
+  with a recoverable action — never silent, never navigating the user away.
+  This applies at every layer: API error responses, mobile error states, worker
+  failures, CLI output. "It probably won't fail" is not a failure mode.
+- **Caught exceptions log the error shape, not the raw input.** Exception catch
+  sites are as likely to contain PII as any other code path — a request body,
+  a receipt scan, a user message. Log the error type and a safe context
+  description; never the raw input or user-supplied content.
+- **Every async operation has an explicit error path.** Unhandled promise
+  rejections, uncaught async exceptions, and silently swallowed errors are
+  defects, not edge cases. If a code path can fail, the failure must be handled
+  and logged — even if the only handling is "log and surface a generic message."
 
 ## Scope and refactoring
 
