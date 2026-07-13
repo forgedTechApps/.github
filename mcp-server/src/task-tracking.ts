@@ -5,6 +5,7 @@ import { minimatch } from "minimatch";
 import type { Finding } from "./check-ci.js";
 import { classifyModel, type AgentStandards, type Phase } from "./standards.js";
 import { appendAuditEvent } from "./audit-log.js";
+import { appendReactEntry } from "./react-log.js";
 
 /**
  * Hypothesis-first task tracking. Persisted in <repo_root>/.agent-standards-tasks.json
@@ -135,6 +136,7 @@ export interface StartTaskArgs {
   hypothesis: string;
   phase?: Phase;
   current_model?: string; // agent-declared, e.g. "claude-opus-4-7"
+  thought?: string;       // ReAct: why the agent believes this is the right task to start now
   expected_reads?: string[];
   expected_writes?: string[];
   // ── Definition-of-ready (Increment 2) ──
@@ -321,6 +323,18 @@ export async function startTask(
     task_id: task.id,
     detail: { phase, task_type: args.task_type, model: args.current_model, description: args.description },
   }).catch(() => {});
+  appendReactEntry(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "start_task",
+    task_id: task.id,
+    thought: args.thought,
+    action: { description: args.description },
+    observation: {
+      outcome: "allowed",
+      codes: ["TASK_STARTED"],
+      summary: `Task ${task.id} started (phase=${phase})`,
+    },
+  }).catch(() => {});
   if (dorEnabled && phase === "execution" && size === "trivial") {
     appendAuditEvent(repoRoot, {
       ts: new Date().toISOString(),
@@ -346,6 +360,10 @@ export async function startTask(
     tips.push("Moderate reversibility — make sure git checkpoints are clean before each propose_change.");
   }
 
+  if (!args.thought) {
+    tips.push("⚠️  REACT_NO_THOUGHT: No thought declared — reasoning trace will have a gap at this decision point. Pass thought='<why you believe this is correct>' to enable post-mortem diagnosis.");
+  }
+
   return {
     task_id: task.id,
     phase,
@@ -362,6 +380,7 @@ export interface ProposeChangeArgs {
   paths: string[];
   rationale: string;
   current_model?: string; // agent-declared, for execution-phase model check
+  thought?: string;       // ReAct: why the agent believes this specific write is the right next step
 }
 
 export async function proposeChange(
@@ -550,8 +569,16 @@ export async function proposeChange(
   task.notes.push(`[${new Date().toISOString()}] propose_change: ${args.rationale} :: paths=${JSON.stringify(args.paths)}`);
   await save(repoRoot, data);
 
+  if (!args.thought) {
+    findings.push({
+      severity: "warn",
+      code: "REACT_NO_THOUGHT",
+      message: "No thought declared — reasoning trace will have a gap at this decision point. Pass thought='<why you believe this is correct>' to enable post-mortem diagnosis.",
+    });
+  }
+
   const blockedFindings = findings.filter((f) => f.severity === "error");
-  const outcome = blockedFindings.length > 0 ? "blocked" : "allowed";
+  const outcome = blockedFindings.length > 0 ? "blocked" : args.thought ? "allowed" : "warned";
   appendAuditEvent(repoRoot, {
     ts: new Date().toISOString(),
     kind: "propose_change",
@@ -566,6 +593,18 @@ export async function proposeChange(
       detail: { code: f.code, paths: args.paths },
     }).catch(() => {});
   }
+  appendReactEntry(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "propose_change",
+    task_id: id,
+    thought: args.thought,
+    action: { description: args.rationale, paths: args.paths },
+    observation: {
+      outcome,
+      codes: findings.map((f) => f.code),
+      summary: (findings[0]?.message ?? "").slice(0, 200),
+    },
+  }).catch(() => {});
 
   if (findings.length === 0) {
     findings.push({
@@ -705,6 +744,7 @@ export interface ExpandScopeArgs {
   path: string;
   /** Why the original plan didn't cover this file. */
   reason: string;
+  thought?: string; // ReAct: why the agent believes the original scope was wrong
   /**
    * The user has explicitly approved adding this path. The MCP server can't
    * actually see user confirmation — this is agent-declared and logged.
@@ -767,12 +807,24 @@ export async function expandScope(
     task_id: id,
     detail: { path: args.path, reason: args.reason },
   }).catch(() => {});
+  appendReactEntry(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "expand_scope",
+    task_id: id,
+    thought: args.thought,
+    action: { description: args.reason, paths: [args.path] },
+    observation: {
+      outcome: args.thought ? "allowed" : "warned",
+      codes: args.thought ? ["EXPAND_SCOPE_OK"] : ["EXPAND_SCOPE_OK", "REACT_NO_THOUGHT"],
+      summary: `Added '${args.path}' to files_intended`,
+    },
+  }).catch(() => {});
 
   return {
     task_id: id,
     files_intended: task.files_intended,
     blocked: false,
-    message: `Added '${args.path}' to task ${id}'s files_intended.`,
+    message: `Added '${args.path}' to task ${id}'s files_intended.${!args.thought ? " ⚠️  REACT_NO_THOUGHT: No thought declared — reasoning trace will have a gap." : ""}`,
   };
 }
 
