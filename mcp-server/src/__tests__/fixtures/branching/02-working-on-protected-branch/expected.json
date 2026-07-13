@@ -1,0 +1,6 @@
+{
+  "findings": [
+    { "severity": "error", "code": "WORKING_ON_PROTECTED_BRANCH", "messageIncludes": "main" },
+    { "severity": "warn", "code": "BRANCH_NO_REMOTE" }
+  ]
+}

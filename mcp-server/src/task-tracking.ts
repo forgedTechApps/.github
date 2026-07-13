@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { minimatch } from "minimatch";
 import type { Finding } from "./check-ci.js";
 import { classifyModel, type AgentStandards, type Phase } from "./standards.js";
+import { appendAuditEvent } from "./audit-log.js";
 
 /**
  * Hypothesis-first task tracking. Persisted in <repo_root>/.agent-standards-tasks.json
@@ -46,6 +47,8 @@ export interface TaskRecord {
   size?: "trivial" | "standard" | "large";
   // ── Auth-change ASVS artifact (Increment 5) ──
   asvs_review?: AsvsReview;
+  // ── Deployment compatibility review (Increment 9) ──
+  deployment_compat_review?: DeploymentCompatReview;
   // ── Task classification + bugfix root cause (Increment 8.5) ──
   task_type?: TaskType;
   root_cause?: string;
@@ -81,6 +84,18 @@ export interface AsvsReview {
   verification: string;
   /** Who or what reviewed (agent name, person, automated tool). */
   reviewer: string;
+  attached_at: string;
+}
+
+export interface DeploymentCompatReview {
+  /** Free-text description of what was checked: which surfaces, which fields/endpoints changed, deploy order confirmed. */
+  summary: string;
+  /** The surfaces involved, e.g. ["api", "web", "mobile"]. */
+  surfaces_affected: string[];
+  /** "safe" = additive-only; "ordered" = must deploy in specified order; "simultaneous" = must release together. */
+  deploy_strategy: "safe" | "ordered" | "simultaneous";
+  /** When deploy_strategy is "ordered", the required order. E.g. ["api", "web"]. */
+  deploy_order?: string[];
   attached_at: string;
 }
 
@@ -300,6 +315,21 @@ export async function startTask(
   data.active_task_id = task.id;
   await save(repoRoot, data);
 
+  appendAuditEvent(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "task_started",
+    task_id: task.id,
+    detail: { phase, task_type: args.task_type, model: args.current_model, description: args.description },
+  }).catch(() => {});
+  if (dorEnabled && phase === "execution" && size === "trivial") {
+    appendAuditEvent(repoRoot, {
+      ts: new Date().toISOString(),
+      kind: "trivial_bypass",
+      task_id: task.id,
+      detail: { description: args.description },
+    }).catch(() => {});
+  }
+
   const tips: string[] = [];
   if (!declared) {
     tips.push("Tip: pass current_model so the MCP can verify model/phase alignment. Without it, alignment is advisory only.");
@@ -441,6 +471,37 @@ export async function proposeChange(
     }
   }
 
+  // ── Deployment compatibility review gate (Increment 9) ──────────────────
+  // When enabled, propose_change against any API surface path blocks until the
+  // agent has attached a deployment_compat_review confirming backwards-compat
+  // between independently deployable surfaces (API, web, mobile, Edge Functions).
+  const deployCompatGate = standards.gates?.deployment_compat_review;
+  if (deployCompatGate?.enabled && !task.deployment_compat_review) {
+    const defaultApiPaths = [
+      "**/routes/**", "**/api/**", "**/edge-functions/**",
+      "**/supabase/functions/**", "**/*.dto.ts", "**/schema.ts",
+    ];
+    const apiPaths = deployCompatGate.api_surface_paths ?? defaultApiPaths;
+    const matchedApiPaths = args.paths.filter((p) =>
+      apiPaths.some((pat) => minimatch(p, pat))
+    );
+    if (matchedApiPaths.length > 0) {
+      findings.push({
+        severity: "error",
+        code: "TASK_NO_DEPLOYMENT_COMPAT_REVIEW",
+        message:
+          `Proposed write(s) ${JSON.stringify(matchedApiPaths)} touch API surface paths ` +
+          `but task ${id} has no deployment compatibility review attached. ` +
+          `Deploying only one surface while the other is live on the old contract can cause breakage.`,
+        fix:
+          `Answer the backwards-compatibility checklist in CLAUDE.md, then call ` +
+          `attach_deployment_compat_review({ task_id: '${id}', summary: '<what you checked>', ` +
+          `surfaces_affected: ['api', 'web'], deploy_strategy: 'safe'|'ordered'|'simultaneous', ` +
+          `deploy_order: ['api', 'web'] }) before retrying.`,
+      });
+    }
+  }
+
   // ── Surface-uncertainty gate (Increment 8.5) ─────────────────────────────
   // When the project is in strict mode AND there are open (unresolved)
   // uncertainties on the active task, block propose_change until they're
@@ -488,6 +549,23 @@ export async function proposeChange(
   // Append notes documenting the proposal — keeps an audit trail
   task.notes.push(`[${new Date().toISOString()}] propose_change: ${args.rationale} :: paths=${JSON.stringify(args.paths)}`);
   await save(repoRoot, data);
+
+  const blockedFindings = findings.filter((f) => f.severity === "error");
+  const outcome = blockedFindings.length > 0 ? "blocked" : "allowed";
+  appendAuditEvent(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "propose_change",
+    task_id: id,
+    detail: { paths: args.paths, rationale: args.rationale, outcome },
+  }).catch(() => {});
+  for (const f of blockedFindings) {
+    appendAuditEvent(repoRoot, {
+      ts: new Date().toISOString(),
+      kind: "gate_fired",
+      task_id: id,
+      detail: { code: f.code, paths: args.paths },
+    }).catch(() => {});
+  }
 
   if (findings.length === 0) {
     findings.push({
@@ -565,6 +643,12 @@ export async function surfaceUncertainty(
       `[${target.resolved_at}] surface_uncertainty resolved (${target.category}): ${args.resolve.resolution}`
     );
     await save(repoRoot, data);
+    appendAuditEvent(repoRoot, {
+      ts: new Date().toISOString(),
+      kind: "surface_uncertainty",
+      task_id: id,
+      detail: { action: "resolved", category: target.category, resolution: args.resolve.resolution },
+    }).catch(() => {});
     return {
       task_id: id,
       uncertainty: target,
@@ -586,6 +670,12 @@ export async function surfaceUncertainty(
     `[${surfaced.surfaced_at}] surface_uncertainty (${surfaced.category}): ${args.description.slice(0, 120)}`
   );
   await save(repoRoot, data);
+  appendAuditEvent(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "surface_uncertainty",
+    task_id: id,
+    detail: { action: "surfaced", category: args.category, description: args.description.slice(0, 120) },
+  }).catch(() => {});
 
   const openCount = task.uncertainties.filter((u) => !u.resolved_at).length;
   const strictProjects = standards.gates?.surface_uncertainty?.strict_mode_projects ?? [];
@@ -671,6 +761,12 @@ export async function expandScope(
     `[${new Date().toISOString()}] expand_scope: added '${args.path}' — ${args.reason} (user_confirmed=true)`
   );
   await save(repoRoot, data);
+  appendAuditEvent(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "expand_scope",
+    task_id: id,
+    detail: { path: args.path, reason: args.reason },
+  }).catch(() => {});
 
   return {
     task_id: id,
@@ -745,6 +841,73 @@ export async function attachAsvsReview(
     asvs_review: review,
     blocked: false,
     message: `ASVS review attached to task ${id}.`,
+  };
+}
+
+// ─── attach_deployment_compat_review ──────────────────────────────────────
+
+export interface AttachDeploymentCompatReviewArgs {
+  task_id?: string;
+  /** Free-text: what was checked, which surfaces, which fields changed, deploy order confirmed. */
+  summary: string;
+  /** The surfaces involved, e.g. ["api", "web", "mobile"]. */
+  surfaces_affected: string[];
+  /** "safe" = additive-only change; "ordered" = must deploy in specified order; "simultaneous" = must release together. */
+  deploy_strategy: "safe" | "ordered" | "simultaneous";
+  /** Required when deploy_strategy is "ordered". E.g. ["api", "web"]. */
+  deploy_order?: string[];
+}
+
+export interface AttachDeploymentCompatReviewResult {
+  task_id: string;
+  deployment_compat_review?: DeploymentCompatReview;
+  blocked: boolean;
+  message: string;
+}
+
+export async function attachDeploymentCompatReview(
+  repoRoot: string,
+  args: AttachDeploymentCompatReviewArgs
+): Promise<AttachDeploymentCompatReviewResult> {
+  const data = await load(repoRoot);
+  const id = args.task_id ?? data.active_task_id;
+  if (!id) {
+    return { task_id: "", blocked: true, message: "No active task. Call start_task first." };
+  }
+  const task = data.tasks.find((t) => t.id === id);
+  if (!task) {
+    return { task_id: id, blocked: true, message: `Task ${id} not found.` };
+  }
+  if (args.deploy_strategy === "ordered" && (!args.deploy_order || args.deploy_order.length < 2)) {
+    return {
+      task_id: id,
+      blocked: true,
+      message: "deploy_strategy='ordered' requires deploy_order listing at least 2 surfaces in sequence.",
+    };
+  }
+
+  const review: DeploymentCompatReview = {
+    summary: args.summary,
+    surfaces_affected: args.surfaces_affected,
+    deploy_strategy: args.deploy_strategy,
+    deploy_order: args.deploy_order,
+    attached_at: new Date().toISOString(),
+  };
+  task.deployment_compat_review = review;
+  task.notes.push(
+    `[${review.attached_at}] attach_deployment_compat_review: strategy=${review.deploy_strategy}, ` +
+    `surfaces=[${review.surfaces_affected.join(", ")}]${review.deploy_order ? `, order=[${review.deploy_order.join(" → ")}]` : ""}`
+  );
+  await save(repoRoot, data);
+
+  return {
+    task_id: id,
+    deployment_compat_review: review,
+    blocked: false,
+    message:
+      `Deployment compatibility review attached to task ${id}. ` +
+      `Strategy: ${review.deploy_strategy}` +
+      (review.deploy_order ? ` (order: ${review.deploy_order.join(" → ")})` : "") + `.`,
   };
 }
 

@@ -1,0 +1,8 @@
+version: 1
+repo: test/fixture
+language: node
+branching:
+  default_branch: main
+  required_branches: [main, dev]
+  feature_branch_pattern: "^(feat|fix|chore|docs|test|refactor)/.+"
+  mode: hard

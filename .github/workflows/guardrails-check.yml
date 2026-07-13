@@ -1,0 +1,81 @@
+name: Guardrails Check
+
+# Blocks PRs that touch sensitive paths (.github/workflows/**, mcp-server/src/**,
+# agent-standards/schema/**, scripts/**) without the 'guardrails-change' label.
+# Re-runs on label add/remove so the agent doesn't need to push a new commit to unblock.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  check-label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check guardrails-change label on sensitive-path PRs
+        env:
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          # Get files changed in this PR
+          changed=$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null || true)
+
+          if [ -z "$changed" ]; then
+            echo "No changed files detected — skipping."
+            exit 0
+          fi
+
+          # Sensitive path globs (mirrors .agent-standards.yml sensitive_paths)
+          sensitive_patterns=(
+            ".github/workflows/"
+            "mcp-server/src/"
+            "agent-standards/schema/"
+            "scripts/"
+          )
+
+          matched_paths=()
+          while IFS= read -r file; do
+            for pattern in "${sensitive_patterns[@]}"; do
+              case "$file" in
+                ${pattern}*)
+                  matched_paths+=("$file")
+                  break
+                  ;;
+              esac
+            done
+          done <<< "$changed"
+
+          if [ ${#matched_paths[@]} -eq 0 ]; then
+            echo "No sensitive paths touched — check passes."
+            exit 0
+          fi
+
+          echo "Sensitive paths touched:"
+          for p in "${matched_paths[@]}"; do echo "  - $p"; done
+
+          # Check for guardrails-change label (PR_LABELS is a JSON array of label names)
+          if echo "${PR_LABELS}" | grep -q '"guardrails-change"'; then
+            echo "'guardrails-change' label present — check passes."
+            exit 0
+          fi
+
+          echo ""
+          echo "ERROR: This PR touches sensitive paths but is missing the 'guardrails-change' label."
+          echo ""
+          echo "Sensitive paths touched:"
+          for p in "${matched_paths[@]}"; do echo "  - $p"; done
+          echo ""
+          echo "To proceed:"
+          echo "  1. Add the 'guardrails-change' label to this PR."
+          echo "  2. Ensure a senior reviewer approves before merging."
+          echo "  3. The check will re-run automatically when the label is added."
+          exit 1

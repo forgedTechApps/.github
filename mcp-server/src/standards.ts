@@ -142,6 +142,12 @@ export interface AgentStandards {
     bugfix_root_cause?: {
       enabled?: boolean;
     };
+    /** Deployment compatibility review gate (Increment 9). */
+    deployment_compat_review?: {
+      enabled?: boolean;
+      /** Glob patterns for API surface paths. Defaults applied in task-tracking.ts. */
+      api_surface_paths?: string[];
+    };
   };
   /**
    * Runtime / SDK end-of-support table for check_framework_support. Each entry

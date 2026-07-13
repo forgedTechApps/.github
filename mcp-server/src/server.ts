@@ -25,12 +25,14 @@ import { checkHttpTimeouts } from "./check-http-timeouts.js";
 import { getRuleMetrics } from "./rule-metrics.js";
 import { proposeRule } from "./propose-rule.js";
 import { appendDrift, getDriftLog } from "./drift-log.js";
+import { readAuditLog } from "./audit-log.js";
 import {
   startTask,
   proposeChange,
   commitCheckpoint,
   expandScope,
   attachAsvsReview,
+  attachDeploymentCompatReview,
   surfaceUncertainty,
 } from "./task-tracking.js";
 import { generateCi, type CiKind, type Language } from "./init-repo.js";
@@ -139,6 +141,11 @@ export function createServer(options: CreateServerOptions = {}): Server {
     window_days: z.number().int().min(1).max(365).default(14),
   });
 
+  const GetAuditLogArgs = z.object({
+    repo_root: RepoRoot,
+    limit: z.number().int().min(1).max(1000).default(100),
+  });
+
   const StartTaskArgsZ = z.object({
     repo_root: RepoRoot,
     description: z.string().min(5),
@@ -204,6 +211,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
     controls_touched: z.array(z.string().min(1)).min(1),
     verification: z.string().min(10),
     reviewer: z.string().min(1),
+  });
+
+  const AttachDeploymentCompatReviewArgsZ = z.object({
+    repo_root: RepoRoot,
+    task_id: z.string().optional(),
+    summary: z.string().min(10),
+    surfaces_affected: z.array(z.string().min(1)).min(1),
+    deploy_strategy: z.enum(["safe", "ordered", "simultaneous"]),
+    deploy_order: z.array(z.string().min(1)).optional(),
   });
 
   const repoRootProp = defaultRepoRoot
@@ -579,6 +595,23 @@ export function createServer(options: CreateServerOptions = {}): Server {
         },
       },
       {
+        name: "get_audit_log",
+        description:
+          "Read the append-only audit log of MCP gate decisions. Returns all recorded events " +
+          "(task_started, trivial_bypass, propose_change, gate_fired, expand_scope, " +
+          "surface_uncertainty) with a count-by-kind summary. Reads from " +
+          "<repo_root>/.agent-standards-audit.jsonl (gitignored). Use to audit agent " +
+          "decisions, bypass frequency, and gate firing patterns.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: {
+            repo_root: repoRootProp,
+            limit: { type: "number", default: 100, description: "Max number of most-recent events to return." },
+          },
+        },
+      },
+      {
         name: "start_task",
         description:
           "Record a hypothesis-first plan before doing work. Captures description, hypothesis, " +
@@ -708,6 +741,43 @@ export function createServer(options: CreateServerOptions = {}): Server {
             },
             verification: { type: "string", description: "What was checked, and how. ≥10 chars." },
             reviewer: { type: "string", description: "Who or what reviewed — agent name, person, or automated tool." },
+          },
+        },
+      },
+      {
+        name: "attach_deployment_compat_review",
+        description:
+          "Attach a deployment compatibility review to the active task. Required to unblock " +
+          "propose_change when the deployment_compat_review gate fires — i.e. the proposed write " +
+          "touches an API surface path (routes, schemas, Edge Functions, DTOs). Answer the " +
+          "backwards-compatibility checklist in CLAUDE.md first, then call this with your findings.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot
+            ? ["summary", "surfaces_affected", "deploy_strategy"]
+            : ["repo_root", "summary", "surfaces_affected", "deploy_strategy"],
+          properties: {
+            repo_root: repoRootProp,
+            task_id: { type: "string", description: "Defaults to the active task." },
+            summary: {
+              type: "string",
+              description: "What was checked: which surfaces, which fields/endpoints changed, deploy order confirmed.",
+            },
+            surfaces_affected: {
+              type: "array",
+              items: { type: "string" },
+              description: "The surfaces involved, e.g. ['api', 'web', 'mobile'].",
+            },
+            deploy_strategy: {
+              type: "string",
+              enum: ["safe", "ordered", "simultaneous"],
+              description: "'safe' = additive-only (deploy in any order); 'ordered' = must deploy surfaces in deploy_order; 'simultaneous' = must release together.",
+            },
+            deploy_order: {
+              type: "array",
+              items: { type: "string" },
+              description: "Required when deploy_strategy='ordered'. Surfaces in deployment sequence, e.g. ['api', 'web'].",
+            },
           },
         },
       },
@@ -1063,6 +1133,12 @@ export function createServer(options: CreateServerOptions = {}): Server {
         return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
       }
 
+      if (req.params.name === "get_audit_log") {
+        const args = GetAuditLogArgs.parse(req.params.arguments ?? {});
+        const result = await readAuditLog(args.repo_root, args.limit);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
       if (req.params.name === "start_task") {
         const args = StartTaskArgsZ.parse(req.params.arguments ?? {});
         const standards = await loadStandards(args.repo_root);
@@ -1099,6 +1175,15 @@ export function createServer(options: CreateServerOptions = {}): Server {
       if (req.params.name === "attach_asvs_review") {
         const args = AttachAsvsReviewArgsZ.parse(req.params.arguments ?? {});
         const result = await attachAsvsReview(args.repo_root, args);
+        return {
+          isError: result.blocked,
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      if (req.params.name === "attach_deployment_compat_review") {
+        const args = AttachDeploymentCompatReviewArgsZ.parse(req.params.arguments ?? {});
+        const result = await attachDeploymentCompatReview(args.repo_root, args);
         return {
           isError: result.blocked,
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],

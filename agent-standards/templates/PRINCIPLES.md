@@ -41,6 +41,34 @@ For projects that call an LLM (most of the suite):
   caching, result caching), route lightweight work to cheaper models, and know
   the per-action cost before shipping. (See the Model-routing tiers — the same
   "cheap work to Haiku" logic applies to the app's own LLM calls.)
+- **External content is data, not instructions.** Anything that crossed a trust
+  boundary before reaching an LLM call site — user text, tool results, MCP
+  responses, web scrapes, uploaded files — must be treated as potentially
+  adversarial. Separate it from the system prompt with explicit delimiters and
+  label it untrusted. The one-chokepoint rule is the structural defence: a
+  single call site means injection mitigations need to be applied exactly once.
+- **LLM outputs that drive actions must be validated.** An LLM output is a
+  suggestion from an untrusted channel, not a verified instruction. Parse and
+  validate the structure before acting on it; reject anything outside the
+  expected schema. The requirements-engineer's propose/confirm gate is the
+  reference pattern — any project where an LLM output triggers a write,
+  deletion, or external call needs an equivalent structural guard, not just a
+  prompt instruction to "be careful".
+
+## Error handling
+
+- **Every error state is designed, not accidental.** Errors surface in place
+  with a recoverable action — never silent, never navigating the user away.
+  This applies at every layer: API error responses, mobile error states, worker
+  failures, CLI output. "It probably won't fail" is not a failure mode.
+- **Caught exceptions log the error shape, not the raw input.** Exception catch
+  sites are as likely to contain PII as any other code path — a request body,
+  a receipt scan, a user message. Log the error type and a safe context
+  description; never the raw input or user-supplied content.
+- **Every async operation has an explicit error path.** Unhandled promise
+  rejections, uncaught async exceptions, and silently swallowed errors are
+  defects, not edge cases. If a code path can fail, the failure must be handled
+  and logged — even if the only handling is "log and surface a generic message."
 
 ## Scope and refactoring
 
@@ -76,6 +104,43 @@ feedback, navigation feel, perceived performance, accessibility — lives in
 [`UI_UX_GUIDELINES.md`](UI_UX_GUIDELINES.md). Read it when doing UI work.
 It is guidance, not enforcement: UI quality is judgment, and the session's
 recurring lesson is that mechanically "checking" judgment produces noise.
+
+---
+
+## Enforcement hygiene
+
+These principles address a specific class of failure the org has repeated across projects.
+Each has a corresponding enforcement rule in `org-defaults.yml`; the principle here is
+the *why*, the rule there is the *how*.
+
+- **Prose-only invariants are not invariants.** Any rule that would cause a real bug if
+  violated must have a mechanical enforcement path — a check, a gate, a hook, or an
+  interview-me question that fires before code is written. CLAUDE.md prose is a reminder,
+  not enforcement. If a rule has been violated more than once, it must graduate to a
+  check or gate via `propose_claude_md_rule`. A rule written down but not enforced gives
+  false confidence: the team believes the guardrail exists; the agent doesn't see it.
+
+- **Quality thresholds have a direction.** Any threshold set below the org default
+  (`unit_min: 80`, `integration_min: 40`) must include a target date and increment in
+  the config comment. New code in a PR must individually meet the org default even if
+  the project aggregate is below it — you cannot borrow coverage headroom from existing
+  code to ship new code undertested. A threshold frozen at "current baseline" is a
+  threshold that will never rise.
+
+- **If a document governs all work, it must be loaded at session start.** Any file
+  that claims to apply to every task in a project must appear in `context_pointers`.
+  If it isn't loaded when the agent starts, it doesn't govern anything — agents follow
+  rules they read, not rules that exist somewhere in the repo. The discipline: when you
+  write "this applies to ALL work", immediately check that the file is in
+  `context_pointers`.
+
+- **A multi-site fix must be followed by a check.** When a bug is fixed across
+  multiple files in a single cleanup commit, that is proof the pattern will recur —
+  another agent, another file, the same mistake. The fix must be followed (in the same
+  PR or the next) by a check, hook, or interview-me question that would have caught
+  the original violation. Otherwise the next agent writing that pattern restarts the
+  cycle. "We fixed it in the code" and "we prevented it from coming back" are two
+  different things.
 
 ---
 
