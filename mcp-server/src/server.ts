@@ -25,6 +25,7 @@ import { checkHttpTimeouts } from "./check-http-timeouts.js";
 import { getRuleMetrics } from "./rule-metrics.js";
 import { proposeRule } from "./propose-rule.js";
 import { appendDrift, getDriftLog } from "./drift-log.js";
+import { readAuditLog } from "./audit-log.js";
 import {
   startTask,
   proposeChange,
@@ -138,6 +139,11 @@ export function createServer(options: CreateServerOptions = {}): Server {
   const GetDriftLogArgs = z.object({
     repo_root: RepoRoot,
     window_days: z.number().int().min(1).max(365).default(14),
+  });
+
+  const GetAuditLogArgs = z.object({
+    repo_root: RepoRoot,
+    limit: z.number().int().min(1).max(1000).default(100),
   });
 
   const StartTaskArgsZ = z.object({
@@ -585,6 +591,23 @@ export function createServer(options: CreateServerOptions = {}): Server {
           properties: {
             repo_root: repoRootProp,
             window_days: { type: "number", default: 14 },
+          },
+        },
+      },
+      {
+        name: "get_audit_log",
+        description:
+          "Read the append-only audit log of MCP gate decisions. Returns all recorded events " +
+          "(task_started, trivial_bypass, propose_change, gate_fired, expand_scope, " +
+          "surface_uncertainty) with a count-by-kind summary. Reads from " +
+          "<repo_root>/.agent-standards-audit.jsonl (gitignored). Use to audit agent " +
+          "decisions, bypass frequency, and gate firing patterns.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: {
+            repo_root: repoRootProp,
+            limit: { type: "number", default: 100, description: "Max number of most-recent events to return." },
           },
         },
       },
@@ -1108,6 +1131,12 @@ export function createServer(options: CreateServerOptions = {}): Server {
         const args = GetDriftLogArgs.parse(req.params.arguments ?? {});
         const summary = await getDriftLog(args.repo_root, args.window_days);
         return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
+      }
+
+      if (req.params.name === "get_audit_log") {
+        const args = GetAuditLogArgs.parse(req.params.arguments ?? {});
+        const result = await readAuditLog(args.repo_root, args.limit);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
       if (req.params.name === "start_task") {

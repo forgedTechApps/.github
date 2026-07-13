@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { minimatch } from "minimatch";
 import type { Finding } from "./check-ci.js";
 import { classifyModel, type AgentStandards, type Phase } from "./standards.js";
+import { appendAuditEvent } from "./audit-log.js";
 
 /**
  * Hypothesis-first task tracking. Persisted in <repo_root>/.agent-standards-tasks.json
@@ -314,6 +315,21 @@ export async function startTask(
   data.active_task_id = task.id;
   await save(repoRoot, data);
 
+  appendAuditEvent(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "task_started",
+    task_id: task.id,
+    detail: { phase, task_type: args.task_type, model: args.current_model, description: args.description },
+  }).catch(() => {});
+  if (dorEnabled && phase === "execution" && size === "trivial") {
+    appendAuditEvent(repoRoot, {
+      ts: new Date().toISOString(),
+      kind: "trivial_bypass",
+      task_id: task.id,
+      detail: { description: args.description },
+    }).catch(() => {});
+  }
+
   const tips: string[] = [];
   if (!declared) {
     tips.push("Tip: pass current_model so the MCP can verify model/phase alignment. Without it, alignment is advisory only.");
@@ -534,6 +550,23 @@ export async function proposeChange(
   task.notes.push(`[${new Date().toISOString()}] propose_change: ${args.rationale} :: paths=${JSON.stringify(args.paths)}`);
   await save(repoRoot, data);
 
+  const blockedFindings = findings.filter((f) => f.severity === "error");
+  const outcome = blockedFindings.length > 0 ? "blocked" : "allowed";
+  appendAuditEvent(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "propose_change",
+    task_id: id,
+    detail: { paths: args.paths, rationale: args.rationale, outcome },
+  }).catch(() => {});
+  for (const f of blockedFindings) {
+    appendAuditEvent(repoRoot, {
+      ts: new Date().toISOString(),
+      kind: "gate_fired",
+      task_id: id,
+      detail: { code: f.code, paths: args.paths },
+    }).catch(() => {});
+  }
+
   if (findings.length === 0) {
     findings.push({
       severity: "info",
@@ -610,6 +643,12 @@ export async function surfaceUncertainty(
       `[${target.resolved_at}] surface_uncertainty resolved (${target.category}): ${args.resolve.resolution}`
     );
     await save(repoRoot, data);
+    appendAuditEvent(repoRoot, {
+      ts: new Date().toISOString(),
+      kind: "surface_uncertainty",
+      task_id: id,
+      detail: { action: "resolved", category: target.category, resolution: args.resolve.resolution },
+    }).catch(() => {});
     return {
       task_id: id,
       uncertainty: target,
@@ -631,6 +670,12 @@ export async function surfaceUncertainty(
     `[${surfaced.surfaced_at}] surface_uncertainty (${surfaced.category}): ${args.description.slice(0, 120)}`
   );
   await save(repoRoot, data);
+  appendAuditEvent(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "surface_uncertainty",
+    task_id: id,
+    detail: { action: "surfaced", category: args.category, description: args.description.slice(0, 120) },
+  }).catch(() => {});
 
   const openCount = task.uncertainties.filter((u) => !u.resolved_at).length;
   const strictProjects = standards.gates?.surface_uncertainty?.strict_mode_projects ?? [];
@@ -716,6 +761,12 @@ export async function expandScope(
     `[${new Date().toISOString()}] expand_scope: added '${args.path}' — ${args.reason} (user_confirmed=true)`
   );
   await save(repoRoot, data);
+  appendAuditEvent(repoRoot, {
+    ts: new Date().toISOString(),
+    kind: "expand_scope",
+    task_id: id,
+    detail: { path: args.path, reason: args.reason },
+  }).catch(() => {});
 
   return {
     task_id: id,

@@ -106,6 +106,8 @@ Workflow: open a PR into `main`, let the `MCP CI` workflow (runs on `mcp-server/
 report, merge when green. Docs-only PRs that don't touch `mcp-server/` won't trigger CI — that's
 expected; merge once mergeable. Branch model: work → `dev`, `dev` → `main` for release.
 
+**Sensitive-path PRs** (touching `.github/workflows/**`, `mcp-server/src/**`, `agent-standards/schema/**`, or `scripts/**`) require the `guardrails-change` label — the `Guardrails Check` CI job blocks merge without it.
+
 ## Self-check
 
 Run the framework against itself before merging a standards change:

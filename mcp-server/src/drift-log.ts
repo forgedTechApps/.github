@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, access, appendFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Finding } from "./check-ci.js";
+import { readAuditLog, auditSummaryLine } from "./audit-log.js";
 
 /**
  * Lightweight rolling log of standards-check findings per repo. JSONL,
@@ -55,6 +56,7 @@ export interface DriftSummary {
   window_days: number;
   by_code: Array<{ code: string; count: number; latest: string; severity: string }>;
   by_source: Record<string, number>;
+  audit_summary?: string;
 }
 
 export async function getDriftLog(repoRoot: string, windowDays = 14): Promise<DriftSummary> {
@@ -94,10 +96,13 @@ export async function getDriftLog(repoRoot: string, windowDays = 14): Promise<Dr
     .map(([code, v]) => ({ code, count: v.count, latest: v.latest, severity: v.severity }))
     .sort((a, b) => b.count - a.count);
 
+  const auditSummary = auditSummaryLine(await readAuditLog(repoRoot));
+
   return {
     total_entries: entries.length,
     window_days: windowDays,
     by_code,
     by_source: sourceMap,
+    audit_summary: auditSummary,
   };
 }
