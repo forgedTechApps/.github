@@ -93,7 +93,7 @@ Add `.agent-standards-react.jsonl`.
 | `get_react_log` respects limit | returns N most recent |
 | `appendReactEntry` does not throw on bad repo path | fire-and-forget confirmed |
 
-**Gate integration:** extend `task-tracking.ts` tests — one fixture with `thought` declared, one without, asserting `REACT_NO_THOUGHT` presence/absence.
+**Gate integration:** two additional tests in `react-log.test.ts` that call `proposeChange` directly — one with `thought` declared, one without — asserting `REACT_NO_THOUGHT` presence/absence in the returned findings.
 
 ## Out of scope
 
