@@ -210,6 +210,12 @@ style_ui:
     tier: practice
     id: component_catalog
 
+  - rule: "Presentation text (labels, messages, error copy, empty states, button titles) is owned by the backend and served to the UI — never hardcoded in client code. This enables translations and copy updates without a UI deployment."
+    tier: practice
+    id: backend_owned_presentation_text
+    # Mechanical proxy: interview-me UI branch question 5 asks whether any new
+    # text is hardcoded in the UI. No AST check — judgment call at review time.
+
 architecture:
   rules:
     # ── Boundaries & inputs ────────────────────────────────────────────────

@@ -182,6 +182,12 @@ the client bundle, a11y/SEO).
 4. **Does it fit the project's design system + navigation rules?** *Tokens
    not magic values; the project's router conventions (CLAUDE.md);
    accessibility floor (contrast, touch targets, semantic labels).*
+5. **Is any presentation text hardcoded in the UI?** *Labels, button titles,
+   error messages, empty states, and any user-facing copy must be owned by
+   the backend and served to the client — never hardcoded in UI code. This
+   enables translations and copy updates without a client deployment. If new
+   text is being added, confirm it comes from the API response, not a
+   client-side constant.*
 
 Skip this branch for non-UI work (pure logic, API, infra).
 
