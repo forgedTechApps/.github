@@ -24,7 +24,7 @@ Single exported function:
 appendAuditEvent(repoRoot: string, event: AuditEvent): Promise<void>
 ```
 
-Appends one JSONL line to `.agent-standards-audit.jsonl` in the repo root. Never throws — errors are silently swallowed so a logging failure never blocks the gate that triggered it.
+Appends one JSONL line to `.agent-standards-audit.jsonl` in the repo root. Never throws — errors are silently swallowed so a logging failure never blocks the gate that triggered it. Call sites fire-and-forget: `appendAuditEvent(...).catch(() => {})` — no `await`.
 
 **Event schema:**
 

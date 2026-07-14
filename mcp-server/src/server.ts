@@ -26,6 +26,7 @@ import { getRuleMetrics } from "./rule-metrics.js";
 import { proposeRule } from "./propose-rule.js";
 import { appendDrift, getDriftLog } from "./drift-log.js";
 import { readAuditLog } from "./audit-log.js";
+import { readReactLog } from "./react-log.js";
 import {
   startTask,
   proposeChange,
@@ -146,6 +147,12 @@ export function createServer(options: CreateServerOptions = {}): Server {
     limit: z.number().int().min(1).max(1000).default(100),
   });
 
+  const GetReactLogArgs = z.object({
+    repo_root: RepoRoot,
+    limit: z.number().int().min(1).max(1000).default(50),
+    task_id: z.string().optional(),
+  });
+
   const StartTaskArgsZ = z.object({
     repo_root: RepoRoot,
     description: z.string().min(5),
@@ -166,6 +173,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
     root_cause: z.string().optional(),
     // ── Reversibility (Beyond-W15, W19) ──
     reversibility: z.enum(["easy", "moderate", "hard"]).optional(),
+    thought: z.string().optional(),
   });
 
   const SurfaceUncertaintyArgsZ = z.object({
@@ -186,6 +194,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
     paths: z.array(z.string()),
     rationale: z.string().min(5),
     current_model: z.string().optional(),
+    thought: z.string().optional(),
   });
 
   const CommitCheckpointArgsZ = z.object({
@@ -203,6 +212,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
     path: z.string().min(1),
     reason: z.string().min(5),
     user_confirmed: z.boolean(),
+    thought: z.string().optional(),
   });
 
   const AttachAsvsReviewArgsZ = z.object({
@@ -612,6 +622,25 @@ export function createServer(options: CreateServerOptions = {}): Server {
         },
       },
       {
+        name: "get_react_log",
+        description:
+          "Read the ReAct reasoning trace log — thought→action→observation entries at MCP " +
+          "decision points (start_task, propose_change, expand_scope). Returns entries with " +
+          "thought_coverage (% of entries where the agent declared a thought). Use for " +
+          "post-mortem diagnosis: what did the agent believe at each decision point? " +
+          "Reads from <repo_root>/.agent-standards-react.jsonl (gitignored). " +
+          "Entries without a thought field indicate gaps where reasoning was not declared.",
+        inputSchema: {
+          type: "object",
+          required: defaultRepoRoot ? [] : ["repo_root"],
+          properties: {
+            repo_root: repoRootProp,
+            limit: { type: "number", default: 50, description: "Max number of most-recent entries to return." },
+            task_id: { type: "string", description: "Filter entries to a specific task ID." },
+          },
+        },
+      },
+      {
         name: "start_task",
         description:
           "Record a hypothesis-first plan before doing work. Captures description, hypothesis, " +
@@ -653,6 +682,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
             task_type: { type: "string", enum: ["feature", "bugfix", "architecture", "auth_change", "trivial"], description: "Task classification. 'bugfix' requires root_cause when bugfix_root_cause gate is enabled." },
             root_cause: { type: "string", description: "For task_type='bugfix': your hypothesis about why the bug occurs. Must be ≥10 chars and not a placeholder ('unknown'/'tbd' rejected). State a hypothesis even if uncertain — verification happens in definition_of_done." },
             reversibility: { type: "string", enum: ["easy", "moderate", "hard"], description: "Cost-of-being-wrong signal. 'hard' = migrations / deploys / data deletions / one-way operations. Surfaces a warning in the task message + logs a note; doesn't block. Make the trade explicit at planning time." },
+            thought: { type: "string", description: "ReAct trace: why you believe this is the right task to start now — the belief that could be wrong. Omitting triggers a REACT_NO_THOUGHT warning in the response." },
           },
         },
       },
@@ -673,6 +703,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
             paths: { type: "array", items: { type: "string" } },
             rationale: { type: "string" },
             current_model: { type: "string", description: "Current model id for the phase check." },
+            thought: { type: "string", description: "ReAct trace: why you believe this specific write is the right next step — the belief that could be wrong. Omitting triggers a REACT_NO_THOUGHT warning." },
           },
         },
       },
@@ -716,6 +747,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
               type: "boolean",
               description: "Agent asserts that the user explicitly approved adding this path. Without this, the call is refused.",
             },
+            thought: { type: "string", description: "ReAct trace: why you believe the original scope was wrong — the belief that could be wrong. Omitting triggers a REACT_NO_THOUGHT warning." },
           },
         },
       },
@@ -1136,6 +1168,12 @@ export function createServer(options: CreateServerOptions = {}): Server {
       if (req.params.name === "get_audit_log") {
         const args = GetAuditLogArgs.parse(req.params.arguments ?? {});
         const result = await readAuditLog(args.repo_root, args.limit);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+
+      if (req.params.name === "get_react_log") {
+        const args = GetReactLogArgs.parse(req.params.arguments ?? {});
+        const result = await readReactLog(args.repo_root, args.limit, args.task_id);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
 
