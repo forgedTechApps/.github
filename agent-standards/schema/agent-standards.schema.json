@@ -36,7 +36,7 @@
 
     "models": {
       "type": "object",
-      "description": "Model routing per task phase. Logical names (planning / execution) so we don't hardcode model IDs that change. CLAUDE.md maps them to concrete IDs at the boundary. Project files override org defaults via normal merge.",
+      "description": "Model routing per task phase. Logical names (planning / execution / refactor / analysis) so we don't hardcode model IDs that change. CLAUDE.md maps them to concrete IDs at the boundary. Project files override org defaults via normal merge.",
       "additionalProperties": false,
       "properties": {
         "planning": {
@@ -46,6 +46,14 @@
         "execution": {
           "$ref": "#/$defs/modelSpec",
           "description": "Used for writing the planned code, fix loops, mechanical refactors. Default: sonnet."
+        },
+        "refactor": {
+          "$ref": "#/$defs/modelSpec",
+          "description": "Used for complex cross-file restructuring, architectural boundary changes. Default: fable / medium effort."
+        },
+        "analysis": {
+          "$ref": "#/$defs/modelSpec",
+          "description": "Used for stranger review, security review, threat modeling, deep cross-system reasoning. Default: fable / medium effort."
         }
       }
     },
@@ -470,13 +478,21 @@
       "properties": {
         "model": {
           "type": "string",
-          "enum": ["opus", "sonnet", "haiku"],
-          "description": "Logical model family. Concrete IDs (claude-opus-4-7, claude-sonnet-4-6, etc.) live in CLAUDE.md so model upgrades don't require touching every project file."
+          "enum": ["fable", "opus", "sonnet", "haiku"],
+          "description": "Logical model family. Concrete IDs (claude-fable-5, claude-opus-4-8, etc.) live in CLAUDE.md so model upgrades don't require touching every project file."
         },
         "effort": {
           "type": "string",
           "enum": ["low", "medium", "high"],
-          "description": "Reasoning effort. Higher = more thinking tokens, better quality on hard problems. Most useful on opus."
+          "description": "Reasoning effort. Higher = more thinking tokens, better quality on hard problems. Most useful on opus and fable."
+        },
+        "fallback": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["fable", "opus", "sonnet", "haiku"]
+          },
+          "description": "Ordered fallback chain. If the declared model isn't the primary, it is checked against this list. First match wins. A fallback match allows the task but emits a tip."
         }
       }
     }

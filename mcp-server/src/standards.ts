@@ -114,6 +114,8 @@ export interface AgentStandards {
   models?: {
     planning?: ModelSpec;
     execution?: ModelSpec;
+    refactor?: ModelSpec;
+    analysis?: ModelSpec;
   };
   /** Project-level gate toggles (Increment 2+). */
   gates?: {
@@ -201,25 +203,57 @@ export interface FrameworkEol {
   eol: Record<string, string>;
 }
 
+export type ModelFamily = "fable" | "opus" | "sonnet" | "haiku";
+
 export interface ModelSpec {
-  model: "opus" | "sonnet" | "haiku";
+  model: ModelFamily;
   effort?: "low" | "medium" | "high";
+  fallback?: ModelFamily[];
 }
 
-export type Phase = "planning" | "execution";
+export type Phase = "planning" | "execution" | "refactor" | "analysis";
 
 /**
- * Maps a declared current_model string (e.g. "claude-opus-4-7") to its
- * logical family (opus / sonnet / haiku). Substring match — tolerant of
- * version suffixes and aliases. Returns null if not recognised.
+ * Maps a declared current_model string (e.g. "claude-opus-4-8") to its
+ * logical family. Substring match — tolerant of version suffixes and aliases.
+ * Returns null if not recognised.
  */
-export function classifyModel(name: string | undefined): "opus" | "sonnet" | "haiku" | null {
+export function classifyModel(name: string | undefined): ModelFamily | null {
   if (!name) return null;
   const n = name.toLowerCase();
+  if (n.includes("fable")) return "fable";
   if (n.includes("opus")) return "opus";
   if (n.includes("sonnet")) return "sonnet";
   if (n.includes("haiku")) return "haiku";
   return null;
+}
+
+/**
+ * Checks whether a declared model family is acceptable for a phase spec.
+ * Returns ok=true if declared matches the primary or any fallback.
+ * isFallback=true signals the agent is running on a degraded but allowed model.
+ */
+export function checkModelAlignment(
+  declared: ModelFamily | null,
+  spec: ModelSpec
+): { ok: boolean; isFallback: boolean; message?: string } {
+  if (declared === null) return { ok: true, isFallback: false };
+  const acceptable: ModelFamily[] = [spec.model, ...(spec.fallback ?? [])];
+  if (!acceptable.includes(declared)) {
+    return {
+      ok: false,
+      isFallback: false,
+      message: `Requires one of [${acceptable.join(", ")}]; you are running '${declared}'.`,
+    };
+  }
+  if (declared !== spec.model) {
+    return {
+      ok: true,
+      isFallback: true,
+      message: `Running on fallback model '${declared}' (primary: '${spec.model}'). Results may be less thorough.`,
+    };
+  }
+  return { ok: true, isFallback: false };
 }
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });

@@ -85,13 +85,19 @@ Practice or Gate via `propose_claude_md_rule`.
 
 ## Model routing — three tiers
 
-This system routes work across three models on purpose:
+This system routes work across four phases on purpose:
 
 - **Planning** → **Opus** (medium effort). Heavy reasoning, hypothesis-first,
   design + architecture decisions, edge cases, scoping. The conversation you're
   reading should be in Opus.
 - **Execution** → **Sonnet**. Writing the planned code, fix loops, mechanical
   refactors, test loops.
+- **Refactor** → **Fable** (medium effort). Complex cross-file restructuring,
+  architectural boundary changes, preserving subtle invariants across many files.
+  Use when the blast radius is large and reasoning-while-writing matters.
+- **Analysis** → **Fable** (medium effort). Stranger review, security review,
+  threat modeling, deep cross-system reasoning. Use when the output is a judgment,
+  not code.
 - **Lightweight output** → **Haiku**. Annotations, PR comments, commit/PR
   summaries, changelog lines, status blurbs — mechanical text generation spun
   off from the main task. When you dispatch a subagent for one of these, pin
@@ -99,19 +105,27 @@ This system routes work across three models on purpose:
   sub-task to Sonnet only when it genuinely needs judgment (e.g. summarising a
   large, subtle diff where a weak summary would mislead) — and say why.
 
+Each phase has a **fallback chain** — if the primary model isn't available, the
+next model in the chain is accepted (with a tip). Chains: planning `opus → sonnet`,
+execution `sonnet → opus`, refactor/analysis `fable → opus → sonnet`.
+
 ### Concrete IDs (update when models advance)
+
+> Use the latest available version of each family. `classifyModel` matches by
+> substring, so `claude-opus-4-9` works without a code change.
 
 | Logical | Concrete (today) | Effort |
 | --- | --- | --- |
-| `opus`   | `claude-opus-4-7`   | medium |
-| `sonnet` | `claude-sonnet-4-6` | (default) |
+| `fable`  | `claude-fable-5`            | medium |
+| `opus`   | `claude-opus-4-8`           | medium |
+| `sonnet` | `claude-sonnet-4-6`         | (default) |
 | `haiku`  | `claude-haiku-4-5-20251001` | (default) |
 
 ### How to use it in a session
 
 1. **Run the parent session in Opus** (medium effort). Use Claude Code's
    `/model` to set this if it isn't already.
-2. **Call `start_task` with `phase='planning'` and `current_model='claude-opus-4-7'`**
+2. **Call `start_task` with `phase='planning'` and `current_model='claude-opus-4-8'`**
    when you begin. The MCP confirms phase/model alignment and returns a task_id.
 3. **When the plan is approved**, dispatch implementation to a Sonnet subagent:
    ```
@@ -124,14 +138,25 @@ This system routes work across three models on purpose:
 4. **Inside the subagent**, call `start_task` again with `phase='execution'`
    and `current_model='claude-sonnet-4-6'`. Subsequent `propose_change` /
    `commit_checkpoint` calls happen there.
+5. **For complex refactors or analysis tasks**, dispatch a Fable subagent:
+   ```
+   Agent({
+     model: "claude-fable-5",
+     description: "Refactor <area> per plan from task <id>",
+     prompt: "<task description + plan>",
+   })
+   ```
+   Inside it, call `start_task` with `phase='refactor'` or `phase='analysis'`
+   and `current_model='claude-fable-5'`.
 
 ### What the MCP enforces
 
-- `start_task` **blocks** if the declared `current_model` doesn't match the
-  phase's expected family (planning expects Opus; execution expects Sonnet).
+- `start_task` **blocks** if the declared `current_model` isn't in the acceptable
+  set for the phase (primary + fallback chain). A fallback match allows the task
+  but emits a tip noting the degraded model.
 - `propose_change` **blocks** if the active task is in `planning` phase but
   paths are being proposed (plans don't write code), or if the declared model
-  isn't the execution family.
+  isn't in the acceptable set for the task's phase.
 - The block is **agent-declared**: the MCP can't independently detect which
   model is calling it, so honesty is required. Omit `current_model` to skip
   the check (advisory only).

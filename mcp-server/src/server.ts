@@ -157,7 +157,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
     repo_root: RepoRoot,
     description: z.string().min(5),
     hypothesis: z.string().min(5),
-    phase: z.enum(["planning", "execution"]).optional(),
+    phase: z.enum(["planning", "execution", "refactor", "analysis"]).optional(),
     current_model: z.string().optional(),
     expected_reads: z.array(z.string()).optional(),
     expected_writes: z.array(z.string()).optional(),
@@ -644,11 +644,11 @@ export function createServer(options: CreateServerOptions = {}): Server {
         name: "start_task",
         description:
           "Record a hypothesis-first plan before doing work. Captures description, hypothesis, " +
-          "expected reads/writes, phase (planning|execution), task_type, and (when the project " +
+          "expected reads/writes, phase (planning|execution|refactor|analysis), task_type, and (when the project " +
           "enables them) DoR fields (scope_statement, files_intended, test_approach, " +
           "definition_of_done, out_of_scope) + root_cause for bugfixes. Returns a task_id and " +
           "the recommended model. " +
-          "BLOCKS if current_model is declared and doesn't match the phase's expected family. " +
+          "BLOCKS if current_model is declared and isn't in the acceptable set (primary + fallback chain) for the phase. " +
           "BLOCKS planning→execution if gates.definition_of_ready is enabled and DoR fields are " +
           "missing (size='trivial' bypasses but is logged). " +
           "BLOCKS task_type='bugfix' if gates.bugfix_root_cause is enabled and root_cause is " +
@@ -663,13 +663,13 @@ export function createServer(options: CreateServerOptions = {}): Server {
             hypothesis: { type: "string" },
             phase: {
               type: "string",
-              enum: ["planning", "execution"],
+              enum: ["planning", "execution", "refactor", "analysis"],
               default: "planning",
-              description: "planning = design/hypothesis; execution = writing the planned code.",
+              description: "planning = design/hypothesis; execution = writing the planned code; refactor = complex cross-file restructuring (fable); analysis = stranger review / security / threat modeling (fable).",
             },
             current_model: {
               type: "string",
-              description: "The model currently running this session (e.g. 'claude-opus-4-7'). Required for the model/phase block to fire.",
+              description: "The model currently running this session (e.g. 'claude-opus-4-8'). Required for the model/phase block to fire.",
             },
             expected_reads: { type: "array", items: { type: "string" }, description: "File paths or globs you expect to read." },
             expected_writes: { type: "array", items: { type: "string" }, description: "File paths or globs you expect to modify." },
