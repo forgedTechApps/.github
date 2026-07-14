@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { minimatch } from "minimatch";
 import type { Finding } from "./check-ci.js";
-import { classifyModel, type AgentStandards, type Phase } from "./standards.js";
+import { classifyModel, checkModelAlignment, type AgentStandards, type Phase } from "./standards.js";
 import { appendAuditEvent } from "./audit-log.js";
 import { appendReactEntry } from "./react-log.js";
 
@@ -207,39 +207,36 @@ export async function startTask(
   const expected = standards.models?.[phase];
   const declared = classifyModel(args.current_model);
 
-  // Block if the agent declared a model that doesn't match the phase's expected family.
-  // Default policy: block. Agent can override by dispatching a subagent on the right model.
-  let blocked = false;
-  let blockMessage: string | undefined;
-  if (expected && declared && declared !== expected.model) {
-    blocked = true;
-    const cost =
-      declared === "opus" && expected.model === "sonnet"
-        ? "You are about to execute on opus — that burns 3–5× the budget of sonnet for work that doesn't need the extra reasoning. Switch."
-        : declared === "sonnet" && expected.model === "opus"
-        ? "You are about to PLAN on sonnet — planning on a smaller model means missed edge cases, shallow design, rework later. Switch."
-        : `Phase '${phase}' is configured for '${expected.model}'; you are running '${declared}'. Switch.`;
-    blockMessage =
-      `❌ WRONG MODEL FOR PHASE — task blocked.\n\n` +
-      `${cost}\n\n` +
-      `Phase: ${phase}\n` +
-      `Required: claude-${expected.model}${expected.effort ? ` (effort: ${expected.effort})` : ""}\n` +
-      `Running: ${args.current_model} (resolves to ${declared})\n\n` +
-      `Fix one of two ways:\n` +
-      `  1. Dispatch a subagent on the right model:\n` +
-      `     Agent({ model: "claude-${expected.model}-...", subagent_type: "...", prompt: "..." })\n` +
-      `  2. Switch the session model yourself (e.g. /model claude-${expected.model}-... in Claude Code), then retry start_task.\n\n` +
-      `Bypass intentionally? Omit current_model — the MCP can't enforce what isn't declared. Doing so silences this gate; the cost asymmetry remains.`;
-  }
-
-  if (blocked) {
-    return {
-      task_id: "",
-      phase,
-      recommended_model: expected ? { model: expected.model, effort: expected.effort } : undefined,
-      blocked: true,
-      message: blockMessage!,
-    };
+  // Block if the agent declared a model outside the acceptable set (primary + fallback).
+  if (expected) {
+    const alignment = checkModelAlignment(declared, expected);
+    if (!alignment.ok) {
+      const acceptable = [expected.model, ...(expected.fallback ?? [])];
+      const cost =
+        declared === "opus" && expected.model === "sonnet"
+          ? "You are about to execute on opus — that burns 3–5× the budget of sonnet for work that doesn't need the extra reasoning. Switch."
+          : declared === "sonnet" && expected.model === "opus"
+          ? "You are about to PLAN on sonnet — planning on a smaller model means missed edge cases, shallow design, rework later. Switch."
+          : `Phase '${phase}' requires one of [${acceptable.join(", ")}]; you are running '${declared}'. Switch.`;
+      const blockMessage =
+        `❌ WRONG MODEL FOR PHASE — task blocked.\n\n` +
+        `${cost}\n\n` +
+        `Phase: ${phase}\n` +
+        `Acceptable: ${acceptable.map(m => `claude-${m}`).join(", ")}${expected.effort ? ` (effort: ${expected.effort})` : ""}\n` +
+        `Running: ${args.current_model} (resolves to ${declared})\n\n` +
+        `Fix one of two ways:\n` +
+        `  1. Dispatch a subagent on an acceptable model:\n` +
+        `     Agent({ model: "claude-${expected.model}-...", subagent_type: "...", prompt: "..." })\n` +
+        `  2. Switch the session model yourself (e.g. /model claude-${expected.model}-... in Claude Code), then retry start_task.\n\n` +
+        `Bypass intentionally? Omit current_model — the MCP can't enforce what isn't declared. Doing so silences this gate; the cost asymmetry remains.`;
+      return {
+        task_id: "",
+        phase,
+        recommended_model: { model: expected.model, effort: expected.effort },
+        blocked: true,
+        message: blockMessage,
+      };
+    }
   }
 
   // ── Definition-of-ready gate (Increment 2) ─────────────────────────────────
@@ -347,6 +344,11 @@ export async function startTask(
   const tips: string[] = [];
   if (!declared) {
     tips.push("Tip: pass current_model so the MCP can verify model/phase alignment. Without it, alignment is advisory only.");
+  } else if (expected) {
+    const alignment = checkModelAlignment(declared, expected);
+    if (alignment.isFallback && alignment.message) {
+      tips.push(`⚠️  ${alignment.message}`);
+    }
   }
   if (expected) {
     tips.push(`Phase '${phase}' uses model='${expected.model}'${expected.effort ? ` effort='${expected.effort}'` : ""}.`);
@@ -417,17 +419,21 @@ export async function proposeChange(
   // — the agent should have transitioned (via start_task with phase=execution
   // on a Sonnet subagent).
   const declared = classifyModel(args.current_model);
-  const expected = standards.models?.execution;
-  if (declared && expected && declared !== expected.model) {
-    findings.push({
-      severity: "error",
-      code: "TASK_WRONG_MODEL_FOR_EXECUTION",
-      message:
-        `Writes (execution phase) expect model family '${expected.model}', ` +
-        `but current_model='${args.current_model}' resolves to '${declared}'. ` +
-        `Dispatch a subagent: Agent({ model: "claude-${expected.model}-...", ... }).`,
-      fix: "Stop writing from the planning model. Hand off to an execution subagent.",
-    });
+  const taskPhaseSpec = standards.models?.[task.phase as Phase];
+  if (declared && taskPhaseSpec) {
+    const alignment = checkModelAlignment(declared, taskPhaseSpec);
+    if (!alignment.ok) {
+      const acceptable = [taskPhaseSpec.model, ...(taskPhaseSpec.fallback ?? [])];
+      findings.push({
+        severity: "error",
+        code: "TASK_WRONG_MODEL_FOR_EXECUTION",
+        message:
+          `Phase '${task.phase}' expects one of [${acceptable.join(", ")}], ` +
+          `but current_model='${args.current_model}' resolves to '${declared}'. ` +
+          `Dispatch a subagent: Agent({ model: "claude-${taskPhaseSpec.model}-...", ... }).`,
+        fix: `Stop writing from the wrong model. Hand off to an agent running one of: ${acceptable.map(m => `claude-${m}`).join(", ")}.`,
+      });
+    }
   }
   if (task.phase === "planning" && (args.paths?.length ?? 0) > 0) {
     findings.push({

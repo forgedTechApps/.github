@@ -28,8 +28,18 @@ models:
   planning:
     model: opus
     effort: medium
+    fallback: [sonnet]
   execution:
     model: sonnet
+    fallback: [opus]
+  refactor:
+    model: fable
+    effort: medium
+    fallback: [opus, sonnet]
+  analysis:
+    model: fable
+    effort: medium
+    fallback: [opus, sonnet]
 
 # ── Workflow gates (org-wide defaults) ──────────────────────────────────────
 # definition_of_ready (Increment 2) + scope_expansion (Increment 3): opt-in
