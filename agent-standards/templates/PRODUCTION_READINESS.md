@@ -29,6 +29,20 @@ you get here. This section is the security that's specific to *shipping to a rea
 - [ ] New external egress (a new API the service now calls in prod) is allowed by network policy and uses prod credentials.
 - [ ] If the deploy includes a migration touching sensitive data, the data-at-rest expectations (encryption, retention) still hold after it runs.
 
+## ISO 27001 — information security controls (deploy-time)
+
+> Walk only when the change touches: authentication, authorisation, data storage/retention,
+> user PII, audit trails, or access control logic. N-A for pure logic / UI / infra changes
+> with no security surface.
+
+- [ ] **Access control (A.9):** any new role, permission, or access path is documented and the principle of least privilege is preserved. No new "admin for now" shortcuts left in.
+- [ ] **Data retention (A.8/A.11):** if the change stores new user data, the retention period is defined and the deletion path exists. No indefinite retention by omission.
+- [ ] **Audit trail (A.12):** security-relevant actions (login, permission change, data export, admin action) produce a log entry that can't be silently dropped. New actions added by this change are included.
+- [ ] **Cryptography (A.10):** any new data at rest or in transit uses the org-approved encryption standard. No custom crypto, no plaintext PII in logs or DB columns.
+- [ ] **Incident response (A.16):** if this changes how auth, data access, or secrets work, the incident response runbook still accurately describes the blast radius and initial response steps. Update it if not.
+- [ ] **Third-party / supply chain (A.15):** any new external dependency (API, SDK, package) has been assessed — data leaves the org boundary, what's shared, what's the vendor's retention policy?
+- [ ] **Vulnerability management (A.12):** no known-vulnerable dependency version introduced. `check_secrets` and `check_http_security` passed (precondition — confirm before reaching here).
+
 ## Performance
 
 - [ ] Failure mode under load is understood: what happens at 10×, 100× the expected rate?
@@ -67,7 +81,7 @@ you get here. This section is the security that's specific to *shipping to a rea
 When reporting a deploy, state the readiness posture, not just "deployed":
 
 ```
-Readiness: security ok · perf ok · observability ok · rollback: <how>
+Readiness: security ok · iso27001: <ok | n-a | gaps: ...> · perf ok · observability ok · rollback: <how>
 Gaps accepted: <none | list, with why>
 Deployed to: <staging | prod>, verified at <endpoint>
 ```
