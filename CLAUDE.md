@@ -48,6 +48,8 @@ work in this repo too. In addition to the universal branches, the interview MUST
   not checks. A new check must be binary, low-false-positive, and load-bearing.
 - **"Does this require a `v1` tag bump?"** If so, it lands in every product repo immediately —
   coordinate before pushing.
+- **"Does this change `agent-standards/defaults/org-defaults.yml`?"** Every product repo's `.agent-standards.yml` extends it — a rule change, severity change, or new block silently affects all six projects. Confirm the blast radius and that the test suite still passes (`pnpm --filter ./mcp-server test`).
+- **"Does this change the `interview-me` skill?"** The skill is symlinked into every project. A breaking change to expected fields or question branches corrupts every project's DoR flow simultaneously. Confirm the change is backwards-compatible or coordinate the update across all projects.
 
 Trivial bypass (`size: 'trivial'`) is **not available** for changes to `.github/workflows/**`,
 `mcp-server/src/**`, `agent-standards/schema/**`, or any check severity/tier — each needs the

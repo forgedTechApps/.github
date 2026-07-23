@@ -188,6 +188,13 @@ the client bundle, a11y/SEO).
    enables translations and copy updates without a client deployment. If new
    text is being added, confirm it comes from the API response, not a
    client-side constant.*
+6. **Does this change need a feature flag?** *Any UI change that introduces
+   new behaviour, alters an existing screen, or should roll out incrementally
+   must be gated behind a feature flag. Confirm: (a) which flag controls this
+   feature, (b) what the off-state looks like and is tested, (c) who holds
+   the key to enable it in production, and (d) when the flag is scheduled for
+   clean-up. A change shipped without a flag is always-on for everyone — flag
+   it if that's not the intent.*
 
 Skip this branch for non-UI work (pure logic, API, infra).
 
