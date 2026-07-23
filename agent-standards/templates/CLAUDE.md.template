@@ -83,6 +83,36 @@ Practice or Gate via `propose_claude_md_rule`.
 
 ---
 
+## interview-me overrides (<!-- PROJECT NAME -->)
+
+In addition to the universal interview-me branches, the interview MUST ask:
+
+<!-- Add 3–5 project-specific questions here. Each question should target a
+     domain invariant, an irreversible operation, or a cross-surface risk that
+     the universal branches won't catch. Model after TradingBot: tight, binary,
+     tied to a named failure mode.
+
+     Examples to adapt:
+     - "Does this touch [the only authoritative place for X]? Confirm nothing
+       bypasses it."
+     - "Does this change cross-surface behaviour (API + client)? Which surface
+       deploys first and why?"
+     - "Does this store or expose [sensitive data type]? Confirm consent model,
+       retention period, and deletion path."
+     - "Are any [money/health/PII] values involved? Confirm the type + format
+       invariant (e.g. decimal not float)."
+     - "Is this changing a [live/irreversible] code path? Confirm deploy is
+       manual and not assumed to be automatic."
+-->
+
+Strict mode is on: `surface_uncertainty` blocks `propose_change` until each item is resolved.
+
+Trivial bypass (`size: 'trivial'`) is **not available** for any task touching:
+`<!-- list sensitive paths, e.g. Domain/, auth/**, migrations/**, deploy-*.sh -->`.
+Each of those needs the full interview.
+
+---
+
 ## Model routing — three tiers
 
 This system routes work across four phases on purpose:
